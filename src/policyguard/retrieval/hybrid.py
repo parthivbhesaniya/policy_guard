@@ -35,12 +35,14 @@ class HybridRetriever:
             matches_by_id[match["child_id"]] = match
 
         def rrf_score(child_id: str) -> float:
-            score = 0.0
-            if child_id in dense_rank:
-                score += 1.0 / (RRF_K + dense_rank[child_id] + 1)
-            if child_id in bm25_rank:
-                score += 1.0 / (RRF_K + bm25_rank[child_id] + 1)
-            return score
+            # A candidate missing from one ranked list (e.g. the single best dense match, which
+            # BM25 never found at all because it shares no literal keywords with the query) gets
+            # a bounded penalty -- treated as tied for the worst rank actually observed in that
+            # list -- rather than zero credit, which would let several candidates that are only
+            # mediocre in *both* lists out-score a candidate that's excellent in just one.
+            d_rank = dense_rank.get(child_id, fetch_k)
+            b_rank = bm25_rank.get(child_id, fetch_k)
+            return 1.0 / (RRF_K + d_rank + 1) + 1.0 / (RRF_K + b_rank + 1)
 
         ranked_ids = sorted(all_ids, key=rrf_score, reverse=True)
         return [matches_by_id[i] for i in ranked_ids[:k]]

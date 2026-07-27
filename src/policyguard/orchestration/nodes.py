@@ -43,8 +43,15 @@ def _citation_to_dict(citation: Citation) -> dict:
     return {"doc_id": citation.doc_id, "section": citation.section}
 
 REWRITE_PROMPT = """Rewrite the employee's question below into a clear, specific search query \
-for retrieving relevant HR/IT policy sections. Keep it short. Return ONLY the rewritten query, \
-with no explanation or quotation marks."""
+for retrieving relevant sections from the company's internal HR/IT documents.
+
+Keep it short, and preserve any specific nouns, names, or entities already in the question --
+do not add generic words like "policy" unless the question is already specifically about a
+policy's rules (e.g. don't turn "what is the company name" into "company name policy"; that
+changes what's being asked for). If the question is already clear and specific, return it
+unchanged.
+
+Return ONLY the rewritten query, with no explanation or quotation marks."""
 
 GRADE_PROMPT_TEMPLATE = """You are grading whether policy excerpts are relevant to a question.
 
@@ -67,7 +74,11 @@ Answer to check:
 {answer}
 
 Respond with the single word GROUNDED if every claim in the answer is supported by the excerpts. \
-Respond with NOT_GROUNDED if the answer contains any claim not supported by the excerpts. \
+Respond with NOT_GROUNDED if the answer contains any claim not supported by the excerpts. An \
+answer that makes no factual claims at all -- for example, one that says it cannot answer or \
+doesn't have enough information -- is vacuously grounded: respond GROUNDED, since there is \
+nothing left unsupported.
+
 Respond with only that one word.
 """
 

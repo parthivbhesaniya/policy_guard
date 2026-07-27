@@ -2,11 +2,15 @@
 and human-in-the-loop escalation with SQLite checkpointing).
 
 Usage:
+    # single-shot
     python -m policyguard.orchestration.ask "how many carryover leave days am I allowed"
     python -m policyguard.orchestration.ask "..." --thread-id my-thread
 
+    # interactive: omit the question to start the pipeline once and ask repeatedly
+    python -m policyguard.orchestration.ask
+
 If the answer can't be verified as grounded after retries, the graph pauses and persists its
-state under --thread-id in --checkpoint-db. Resume it with:
+state under a thread id in --checkpoint-db. Resume it with:
     python -m policyguard.orchestration.resolve --thread-id <id> --action approve|edit|reject
 """
 
@@ -52,28 +56,64 @@ def print_result(result: dict, thread_id: str) -> None:
     print(f"\n(thread id: {thread_id})")
 
 
+def _run_interactive(app) -> None:
+    print("PolicyGuard -- full agentic pipeline (hybrid retrieval + grading + hallucination check)")
+    print("Ask a policy question. Type 'exit', 'quit', or Ctrl+D to stop.\n")
+
+    while True:
+        try:
+            question = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nGoodbye.")
+            return
+
+        if not question:
+            continue
+        if question.lower() in ("exit", "quit"):
+            print("Goodbye.")
+            return
+
+        thread_id = str(uuid.uuid4())
+        config = {"configurable": {"thread_id": thread_id}}
+        result = app.invoke(initial_state(question), config=config)
+        print()
+        print_result(result, thread_id)
+        print()
+
+
 def main() -> None:
     load_dotenv()
 
     parser = argparse.ArgumentParser(description="PolicyGuard question-answering CLI (LangGraph + HITL)")
-    parser.add_argument("question", type=str, help="Question to ask")
+    parser.add_argument(
+        "question", type=str, nargs="?", default=None, help="Question to ask (omit to start interactive mode)"
+    )
     parser.add_argument("--persist-dir", type=Path, default=Path("./chroma_db"), help="Chroma persistence directory")
     parser.add_argument(
         "--checkpoint-db", type=Path, default=DEFAULT_CHECKPOINT_DB, help="SQLite checkpoint database path"
     )
-    parser.add_argument("--thread-id", type=str, default=None, help="Conversation thread id (default: random)")
+    parser.add_argument(
+        "--thread-id", type=str, default=None, help="Conversation thread id (single-shot mode only; default: random)"
+    )
     parser.add_argument("--k", type=int, default=4, help="Number of child chunks to retrieve")
     parser.add_argument(
         "--no-rerank", action="store_true", help="Skip Cohere reranking (use raw hybrid-fused candidates)"
     )
     args = parser.parse_args()
 
-    thread_id = args.thread_id or str(uuid.uuid4())
     store = PolicyVectorStore(args.persist_dir)
     reranker = None if args.no_rerank else CohereReranker()
 
+    # Setup (Chroma connection, BM25 index, LLM, graph compilation) happens once here, whether
+    # the run below is a single question or an interactive loop of many.
     with SqliteSaver.from_conn_string(str(args.checkpoint_db)) as checkpointer:
         app = build_graph(store, k=args.k, checkpointer=checkpointer, reranker=reranker)
+
+        if args.question is None:
+            _run_interactive(app)
+            return
+
+        thread_id = args.thread_id or str(uuid.uuid4())
         config = {"configurable": {"thread_id": thread_id}}
         result = app.invoke(initial_state(args.question), config=config)
         print_result(result, thread_id)

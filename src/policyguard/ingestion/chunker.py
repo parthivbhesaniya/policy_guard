@@ -77,7 +77,10 @@ def chunk_document(doc: PolicyDocument) -> tuple[list[Chunk], list[Chunk]]:
                     doc_id=doc.doc_id,
                     level="child",
                     section=child_title,
-                    text=child_text,
+                    # Prefixed with its own title: a terse section (e.g. a heading whose entire
+                    # payload IS the title, like a company name or a short subsection name) would
+                    # otherwise be unfindable by retrieval, since only the body text is indexed.
+                    text=f"{child_title}\n{child_text}",
                     metadata={**base_metadata, "section": child_title, "parent_id": parent_id},
                     parent_id=parent_id,
                 )
