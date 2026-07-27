@@ -21,6 +21,7 @@ handling real policy questions.
   - [Tech stack — why each piece is there](#tech-stack--why-each-piece-is-there)
   - [Project structure](#project-structure)
   - [Getting started](#getting-started)
+  - [PDF support](#pdf-support)
   - [Usage](#usage)
   - [Testing](#testing)
   - [Evaluation \& results](#evaluation--results)
@@ -82,10 +83,12 @@ Every arrow above is a real, tested code path — not aspirational. See
 
 ## Key features
 
-- **Hierarchical chunking that preserves document structure.** Policy docs are split by
-  Markdown heading level, not fixed character windows — `##` sections become generation-context
-  "parent" chunks, `###` subsections become retrieval-precision "child" chunks, each carrying a
+- **Hierarchical chunking that preserves document structure.** Markdown policy docs are split by
+  heading level, not fixed character windows — `##` sections become generation-context "parent"
+  chunks, `###` subsections become retrieval-precision "child" chunks, each carrying a
   `parent_id` back to its section. No sentence gets cut mid-thought by an arbitrary token count.
+  PDF docs (no heading structure to exploit) fall back to flat, paragraph-aware, overlapping
+  fixed-size windows instead -- see [PDF support](#pdf-support).
 - **Hybrid retrieval, not just vector similarity.** Dense embedding search (Chroma) and BM25
   keyword search run over the same corpus and are fused with Reciprocal Rank Fusion, so an exact
   keyword match doesn't lose to a semantically-similar-but-wrong chunk. Fused candidates are then
@@ -120,6 +123,7 @@ Every arrow above is a real, tested code path — not aspirational. See
 | LLM inference | **Groq** (Llama 3.x) via `langchain-groq` | Fast, free-tier-friendly inference for every LLM call in the graph — rewriting, grading, generation, verification, and evaluation judging all go through one interchangeable `BaseChatModel`. |
 | Orchestration | **LangGraph** `StateGraph` | The centerpiece: models the agent as an explicit graph with conditional routing (`grade_documents` → generate or bail) and a real cycle (`verify_answer` → retry `generate`), not a linear chain pretending to be an agent. |
 | Vector search | **ChromaDB** (persistent, local embeddings) | Stores parent/child chunk collections and runs dense similarity search — no external embedding API required. |
+| PDF ingestion | **pypdf** | Pure-Python text extraction for PDF policy docs (no compiled/native deps) — no torch-style wheel-availability risk. |
 | Keyword search | **rank-bm25** | Classic sparse retrieval over the same child chunks, built in-memory from the Chroma collection — catches exact-term queries dense embeddings can miss. |
 | Fusion | Reciprocal Rank Fusion (hand-rolled) | Combines the dense and BM25 rankings into one candidate pool without needing either signal to dominate by construction. |
 | Reranking | **Cohere** Rerank API | Cross-encoder-quality reranking of the fused candidates. (A local `sentence-transformers` cross-encoder was the first choice — see [Engineering highlights](#engineering-highlights) for why that had to change.) |
@@ -128,7 +132,7 @@ Every arrow above is a real, tested code path — not aspirational. See
 | Persistence | **langgraph-checkpoint-sqlite** | Durable, on-disk checkpointing of full graph state per `thread_id`, so paused conversations survive process restarts. |
 | Evaluation & tracing | **LangSmith** | Optional hosted experiment tracking: uploads the golden dataset once, then logs each evaluation run as a comparable, traced experiment. |
 | Config | **python-dotenv** | Loads API keys from a gitignored `.env` — nothing secret is hardcoded or committed. |
-| Testing | **pytest** | 63 tests across every layer, built almost entirely on fakes (`FakeLLM`, `FakeCohereClient`) and real-but-temporary Chroma stores (`tmp_path`) instead of mocking/patching internals. |
+| Testing | **pytest** | 74 tests across every layer, built almost entirely on fakes (`FakeLLM`, `FakeCohereClient`) and real-but-temporary Chroma stores (`tmp_path`) instead of mocking/patching internals. |
 
 ## Project structure
 
@@ -138,11 +142,12 @@ policyguard/
 │   ├── policies/                 # Sample HR + IT policy docs (Markdown + YAML front matter)
 │   └── eval/golden_dataset.json  # 24-example golden Q&A set (question, answer, source, answerable)
 ├── src/policyguard/
-│   ├── ingestion/                # Loading, hierarchical chunking, Chroma vector store
-│   │   ├── loader.py             #   parses YAML front matter + Markdown body
-│   │   ├── chunker.py            #   ## → parent chunks, ### → child chunks
+│   ├── ingestion/                # Loading, chunking, Chroma vector store
+│   │   ├── loader.py             #   Markdown: parses YAML front matter + body
+│   │   ├── pdf_loader.py         #   PDF: extracts text, reads sidecar .yaml metadata
+│   │   ├── chunker.py            #   Markdown: ## → parent, ### → child. PDF: flat windows
 │   │   ├── vectorstore.py        #   Chroma-backed store: query, get-by-id, get-all
-│   │   └── ingest.py             #   CLI: ingest docs / run a raw retrieval query
+│   │   └── ingest.py             #   CLI: ingest docs (.md or .pdf) / run a raw retrieval query
 │   ├── generation/                # Linear "baseline" generate-with-citations chain
 │   │   ├── chain.py               #   retrieve → prompt → LLM → validate citations
 │   │   ├── prompts.py             #   forced-citation system prompt
@@ -162,7 +167,7 @@ policyguard/
 │       ├── dataset.py                 #   golden example loader
 │       ├── evaluators.py              #   recall@k, citation_accuracy, faithfulness, answer_relevance
 │       └── run_eval.py                #   CLI: local scorecard or LangSmith experiment
-└── tests/                              # 63 tests, one file per module above
+└── tests/                              # 74 tests, one file per module above
 ```
 
 ## Getting started
@@ -187,6 +192,29 @@ cp .env.example .env
 | `LANGSMITH_API_KEY` | `run_eval --langsmith` only | Optional — local eval mode works without it |
 
 Ingest the sample policy docs into a local Chroma store:
+
+```bash
+python -m policyguard.ingestion.ingest --input data/policies --persist-dir ./chroma_db
+```
+
+## PDF support
+
+`data/policies/` (or any `--input` directory) can mix `.md` and `.pdf` policy docs. A PDF has
+no YAML front matter and no `##`/`###` heading structure to hierarchically chunk by, so:
+
+- **Metadata** comes from a sidecar YAML file with the same name: `finance_policy.pdf` needs a
+  `finance_policy.yaml` next to it, with the same four required fields as Markdown front matter:
+  ```yaml
+  doc_id: finance-expense-policy
+  department: Finance
+  effective_date: 2026-01-01
+  version: 1.0
+  ```
+- **Chunking** falls back to flat, fixed-size, paragraph-aware, overlapping windows (no
+  parent/child section split) — each window cited as `[source: doc_id, Part N]`.
+
+Text extraction uses `pypdf` (pure Python, no compiled/native dependencies). Ingest exactly the
+same way — the CLI auto-detects file type by extension:
 
 ```bash
 python -m policyguard.ingestion.ingest --input data/policies --persist-dir ./chroma_db
@@ -231,11 +259,12 @@ python -m policyguard.evaluation.run_eval --langsmith     # + tracked LangSmith 
 pytest
 ```
 
-63 tests, ~12 seconds, zero live API calls:
+74 tests, ~12 seconds, zero live API calls:
 
 | File | Tests | Covers |
 | --- | --- | --- |
 | `test_chunker.py` | 6 | Hierarchical chunking, parent/child linking, metadata propagation |
+| `test_pdf_ingestion.py` | 11 | Flat window chunking, overlap, sidecar YAML metadata validation |
 | `test_chain.py` | 5 | Context-block deduping, prompt construction |
 | `test_citations.py` | 4 | Citation parsing + validation |
 | `test_retrieval.py` | 9 | BM25 exact-match, RRF fusion, Cohere reranker (via fake client) |

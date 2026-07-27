@@ -6,4 +6,4 @@ chroma_db/
 *.egg-info/
 .pytest_cache/
 .env
-checkpoints.sqlite
+checkpoints.sqlite*

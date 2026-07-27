@@ -10,6 +10,10 @@ Splits a document's Markdown body by header level:
     becomes a single child chunk equal to its own body.
 
 Every child chunk carries a ``parent_id`` linking it back to its parent chunk.
+
+PDF documents (see ``chunk_pdf_document``) have no such heading structure to exploit, so they're
+chunked flat instead: fixed-size, paragraph-aware, overlapping windows, each acting as both its
+own parent and its own child chunk.
 """
 
 from __future__ import annotations
@@ -87,6 +91,106 @@ def chunk_document(doc: PolicyDocument) -> tuple[list[Chunk], list[Chunk]]:
             )
 
     return parent_chunks, child_chunks
+
+
+DEFAULT_PDF_CHUNK_SIZE = 1000
+DEFAULT_PDF_CHUNK_OVERLAP = 150
+
+_PARAGRAPH_SPLIT_RE = re.compile(r"\n\s*\n")
+
+
+def chunk_pdf_document(
+    doc: PolicyDocument,
+    chunk_size: int = DEFAULT_PDF_CHUNK_SIZE,
+    overlap: int = DEFAULT_PDF_CHUNK_OVERLAP,
+) -> tuple[list[Chunk], list[Chunk]]:
+    """Returns (parent_chunks, child_chunks) for a PDF-sourced PolicyDocument.
+
+    No heading structure to chunk by, so this uses flat fixed-size windows instead of the
+    hierarchical parent/child split ``chunk_document`` does for Markdown. Each window is both
+    its own parent (generation context) and its own child (retrieval target) -- there's no
+    separate, larger context to promote it to.
+    """
+    base_metadata = {
+        "doc_id": doc.doc_id,
+        "department": doc.department,
+        "effective_date": doc.effective_date,
+        "version": doc.version,
+    }
+
+    windows = _split_into_windows(doc.body, chunk_size=chunk_size, overlap=overlap)
+
+    parent_chunks: list[Chunk] = []
+    child_chunks: list[Chunk] = []
+
+    for i, window_text in enumerate(windows):
+        section = f"Part {i + 1}"
+        chunk_id = f"{doc.doc_id}::part-{i + 1}"
+        metadata = {**base_metadata, "section": section}
+
+        parent_chunks.append(
+            Chunk(id=chunk_id, doc_id=doc.doc_id, level="parent", section=section, text=window_text, metadata=metadata)
+        )
+        child_chunks.append(
+            Chunk(
+                id=chunk_id,
+                doc_id=doc.doc_id,
+                level="child",
+                section=section,
+                text=window_text,
+                metadata={**metadata, "parent_id": chunk_id},
+                parent_id=chunk_id,
+            )
+        )
+
+    return parent_chunks, child_chunks
+
+
+def _split_into_windows(text: str, chunk_size: int, overlap: int) -> list[str]:
+    """Paragraph-aware fixed-size chunking with a trailing-character overlap between windows.
+
+    Paragraphs (blank-line-separated blocks) are packed greedily into windows up to
+    `chunk_size` characters; a single paragraph longer than `chunk_size` is hard-split. Each
+    window after the first is prefixed with the tail of the previous window, so context isn't
+    lost right at a chunk boundary.
+    """
+    paragraphs = [p.strip() for p in _PARAGRAPH_SPLIT_RE.split(text) if p.strip()]
+    if not paragraphs:
+        return []
+
+    windows: list[str] = []
+    current = ""
+
+    def flush() -> None:
+        nonlocal current
+        if current.strip():
+            windows.append(current.strip())
+        current = ""
+
+    for paragraph in paragraphs:
+        if len(paragraph) > chunk_size:
+            flush()
+            for start in range(0, len(paragraph), chunk_size):
+                windows.append(paragraph[start : start + chunk_size])
+            continue
+
+        candidate = f"{current}\n\n{paragraph}" if current else paragraph
+        if len(candidate) > chunk_size:
+            flush()
+            current = paragraph
+        else:
+            current = candidate
+
+    flush()
+
+    if overlap <= 0 or len(windows) <= 1:
+        return windows
+
+    overlapped = [windows[0]]
+    for window in windows[1:]:
+        tail = overlapped[-1][-overlap:]
+        overlapped.append(f"{tail}\n\n{window}" if tail else window)
+    return overlapped
 
 
 def _split_into_sections(body: str) -> list[tuple[str, list[str]]]:

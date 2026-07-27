@@ -63,6 +63,14 @@ class PolicyVectorStore:
         result = self._children.get(include=["documents", "metadatas"])
         return result["ids"], result["documents"], result["metadatas"]
 
+    def delete_document(self, doc_id: str) -> None:
+        """Removes every parent and child chunk belonging to `doc_id`. Ingestion only ever
+        upserts, so this is needed before re-ingesting a renamed/replaced document (or dropping
+        one entirely) -- otherwise its old chunks linger in the store forever under a doc_id
+        nothing points to anymore."""
+        self._parents.delete(where={"doc_id": doc_id})
+        self._children.delete(where={"doc_id": doc_id})
+
     def _build_matches(self, ids: list[str], documents: list[str], metadatas: list[dict], distances: list) -> list[dict]:
         parent_ids = [m.get("parent_id") for m in metadatas if m.get("parent_id")]
         parents_by_id: dict[str, str] = {}
