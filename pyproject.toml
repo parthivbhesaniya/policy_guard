@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "policyguard"
+version = "0.1.0"
+description = "Agentic, evaluated RAG system for enterprise policy Q&A"
+requires-python = ">=3.10"
+dependencies = [
+    "chromadb>=0.5",
+    "pyyaml>=6.0",
+    "langchain-core>=0.3",
+    "langchain-groq>=0.2",
+    "langgraph>=0.2",
+    "langgraph-checkpoint-sqlite>=2.0",
+    "langsmith>=0.10",
+    "python-dotenv>=1.0",
+    "rank-bm25>=0.2",
+    "cohere>=5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

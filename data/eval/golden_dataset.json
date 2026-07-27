@@ -1,0 +1,194 @@
+[
+  {
+    "id": "hr-annual-01",
+    "question": "How many days of annual leave do full-time employees accrue per year?",
+    "answerable": true,
+    "expected_doc_id": "hr-leave-policy",
+    "expected_section": "Annual Leave",
+    "expected_answer": "Full-time employees accrue 1.75 days per month, for a total of 21 days per calendar year."
+  },
+  {
+    "id": "hr-annual-02",
+    "question": "How many unused annual leave days can I carry over into next year?",
+    "answerable": true,
+    "expected_doc_id": "hr-leave-policy",
+    "expected_section": "Annual Leave",
+    "expected_answer": "You may carry over a maximum of 5 unused annual leave days into the next calendar year."
+  },
+  {
+    "id": "hr-annual-03",
+    "question": "How much advance notice do I need to give before requesting annual leave?",
+    "answerable": true,
+    "expected_doc_id": "hr-leave-policy",
+    "expected_section": "Annual Leave",
+    "expected_answer": "Leave must be requested at least 5 business days in advance through the HR portal."
+  },
+  {
+    "id": "hr-annual-04",
+    "question": "If I have more than 5 unused leave days at the end of the year, what happens to the extra days?",
+    "answerable": true,
+    "expected_doc_id": "hr-leave-policy",
+    "expected_section": "Annual Leave",
+    "expected_answer": "Any unused days beyond the 5-day cap are forfeited on December 31st unless the employee has an approved carryover exception on file with HR."
+  },
+  {
+    "id": "hr-sick-01",
+    "question": "How many paid sick days do employees get per calendar year?",
+    "answerable": true,
+    "expected_doc_id": "hr-leave-policy",
+    "expected_section": "Sick Leave",
+    "expected_answer": "Employees receive 10 paid sick days per calendar year."
+  },
+  {
+    "id": "hr-sick-02",
+    "question": "Do I need to provide a doctor's note if I'm out sick?",
+    "answerable": true,
+    "expected_doc_id": "hr-leave-policy",
+    "expected_section": "Sick Leave",
+    "expected_answer": "Only for absences exceeding 3 consecutive business days -- you must submit a doctor's note to HR within 5 business days of returning to work."
+  },
+  {
+    "id": "hr-sick-03",
+    "question": "Does unused sick leave carry over into the next calendar year?",
+    "answerable": true,
+    "expected_doc_id": "hr-leave-policy",
+    "expected_section": "Sick Leave",
+    "expected_answer": "No, sick leave does not carry over between calendar years."
+  },
+  {
+    "id": "hr-parental-01",
+    "question": "How many weeks of paid parental leave do eligible employees receive?",
+    "answerable": true,
+    "expected_doc_id": "hr-leave-policy",
+    "expected_section": "Parental Leave",
+    "expected_answer": "Eligible employees receive 12 weeks of paid parental leave following the birth or adoption of a child."
+  },
+  {
+    "id": "hr-parental-02",
+    "question": "How long do I need to have worked here to qualify for paid parental leave?",
+    "answerable": true,
+    "expected_doc_id": "hr-leave-policy",
+    "expected_section": "Parental Leave",
+    "expected_answer": "You must have completed at least 6 months of continuous employment to be eligible for paid parental leave."
+  },
+  {
+    "id": "hr-parental-03",
+    "question": "I've only worked here for 3 months -- what parental leave am I entitled to?",
+    "answerable": true,
+    "expected_doc_id": "hr-leave-policy",
+    "expected_section": "Parental Leave",
+    "expected_answer": "Employees below the 6-month tenure threshold are eligible for unpaid leave under applicable local law, not paid parental leave."
+  },
+  {
+    "id": "it-password-01",
+    "question": "What is the minimum password length required for company accounts?",
+    "answerable": true,
+    "expected_doc_id": "it-security-policy",
+    "expected_section": "Password Requirements",
+    "expected_answer": "Passwords must be at least 14 characters long and include a mix of uppercase, lowercase, numeric, and special characters."
+  },
+  {
+    "id": "it-password-02",
+    "question": "How often do I need to rotate my password on a high-sensitivity system?",
+    "answerable": true,
+    "expected_doc_id": "it-security-policy",
+    "expected_section": "Password Requirements",
+    "expected_answer": "Passwords for high-sensitivity systems must be rotated every 90 days."
+  },
+  {
+    "id": "it-password-03",
+    "question": "What's the password rotation requirement for standard-sensitivity systems?",
+    "answerable": true,
+    "expected_doc_id": "it-security-policy",
+    "expected_section": "Password Requirements",
+    "expected_answer": "Standard-sensitivity systems require password rotation every 180 days."
+  },
+  {
+    "id": "it-password-04",
+    "question": "Can I reuse a password I used a few rotations ago?",
+    "answerable": true,
+    "expected_doc_id": "it-security-policy",
+    "expected_section": "Password Requirements",
+    "expected_answer": "No, reused passwords from the last 10 rotations are not permitted."
+  },
+  {
+    "id": "it-device-01",
+    "question": "What security features must be enabled on my company-issued laptop?",
+    "answerable": true,
+    "expected_doc_id": "it-security-policy",
+    "expected_section": "Device Security",
+    "expected_answer": "Disk encryption, a screen lock, and endpoint monitoring software must be enabled at all times."
+  },
+  {
+    "id": "it-device-02",
+    "question": "How quickly must I report a lost or stolen company device?",
+    "answerable": true,
+    "expected_doc_id": "it-security-policy",
+    "expected_section": "Device Security",
+    "expected_answer": "Within 1 hour of discovery, so it can be remotely wiped and access revoked."
+  },
+  {
+    "id": "it-access-01",
+    "question": "Who needs to approve a request for access beyond my default role?",
+    "answerable": true,
+    "expected_doc_id": "it-security-policy",
+    "expected_section": "Access Requests",
+    "expected_answer": "Both the requesting employee's manager and the owner of the target system must approve."
+  },
+  {
+    "id": "it-access-02",
+    "question": "Where do I submit a request for additional system access?",
+    "answerable": true,
+    "expected_doc_id": "it-security-policy",
+    "expected_section": "Access Requests",
+    "expected_answer": "Access requests are submitted through the IT service desk."
+  },
+  {
+    "id": "neg-01",
+    "question": "What is the office WiFi password?",
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
+  },
+  {
+    "id": "neg-02",
+    "question": "How many vacation days do contractors get?",
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
+  },
+  {
+    "id": "neg-03",
+    "question": "Can I expense a client dinner?",
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
+  },
+  {
+    "id": "neg-04",
+    "question": "What is the capital of France?",
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
+  },
+  {
+    "id": "neg-05",
+    "question": "Does the company offer a 401k match?",
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
+  },
+  {
+    "id": "neg-06",
+    "question": "What's the process for requesting a raise?",
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
+  }
+]
