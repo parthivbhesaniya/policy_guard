@@ -43,6 +43,8 @@ produce and easy to catch.
 
 ## Architecture
 
+![PolicyGuard StateGraph Architecture](./graph_structure.png)
+
 ```
 data/policies/*.md                 data/eval/golden_dataset.json
        │                                       │
@@ -50,7 +52,7 @@ data/policies/*.md                 data/eval/golden_dataset.json
 ┌─────────────────────┐              ┌──────────────────────┐
 │  Ingestion Pipeline  │              │  Evaluation Harness   │
 │  hierarchical chunk  │              │  4 metrics, LangSmith │
-│  + metadata tagging  │              │  experiment tracking  │
+│  + table preservation│              │  experiment tracking  │
 └──────────┬───────────┘              └───────────▲──────────┘
            ▼                                       │
 ┌───────────────────────────┐                      │
@@ -59,22 +61,27 @@ data/policies/*.md                 data/eval/golden_dataset.json
 └──────────┬─────────────────┘         │            │
            │                    ┌──────┴───────┐    │
            ▼                    │  BM25 Index   │    │
-┌────────────────────────────────────────────────────┴────────────┐
-│                 LangGraph Orchestrator (StateGraph)              │
-│                                                                    │
-│  rewrite_query (+ conv. history) → retrieve (dense + BM25 → rerank) │
-│       → grade_documents ──(nothing relevant)──► cannot_answer     │
-│       │ (relevant docs found)                                     │
-│       ▼                                                           │
-│    generate (forced citations) → verify_answer                   │
-│       │              │                                            │
-│       │        (not grounded, retries left) ──► back to generate │
-│       │              │                                            │
-│       │        (retries exhausted) ──► escalate_to_human          │
-│       │                                    (interrupt + SQLite    │
-│       ▼                                     checkpoint, resumable │
-│   grounded answer                           across processes)     │
-└────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────┴───────────────────┐
+│                 LangGraph Orchestrator (StateGraph)                    │
+│                                                                        │
+│  rewrite_query → classify_intent                                       │
+│       ├── (greeting) ─────────────► handle_greeting ────────────────┐  │
+│       ├── (off-topic) ────────────► handle_out_of_scope ────────────┼─┐│
+│       ├── (ambiguous query) ──────► handle_clarification ───────────┼─┼┤
+│       └── (policy query) ─────────► retrieve (dense + BM25 → rerank)│ │ │
+│                 → grade_documents ──(nothing relevant)──► cannot_ans│ │ │
+│                 │ (relevant docs found)                             │ │ │
+│                 ▼                                                   │ │ │
+│              generate (forced citations) → verify_answer            │ │ │
+│                 │              │                                    │ │ │
+│                 │        (not grounded, retries left) ─► generate │ │ │
+│                 │              │                                    │ │ │
+│                 │        (retries exhausted) ─► escalate_to_human   │ │ │
+│                 │                                   (interrupt +    │ │ │
+│                 │                                    SQLite state)  │ │ │
+│                 ▼                                                   ▼ ▼ ▼
+│             grounded answer                                         END  
+└────────────────────────────────────────────────────────────────────────┘
                           │
                           ▼
             answer + citations + audit trail
@@ -85,12 +92,11 @@ Every arrow above is a real, tested code path — not aspirational. See
 
 ## Key features
 
-- **Hierarchical chunking that preserves document structure.** Markdown policy docs are split by
-  heading level, not fixed character windows — `##` sections become generation-context "parent"
-  chunks, `###` subsections become retrieval-precision "child" chunks, each carrying a
-  `parent_id` back to its section. No sentence gets cut mid-thought by an arbitrary token count.
-  PDF docs (no heading structure to exploit) fall back to flat, paragraph-aware, overlapping
-  fixed-size windows instead -- see [PDF support](#pdf-support).
+- **Hierarchical chunking with Markdown table preservation & PDF parent-child windowing.** Markdown policy docs are split by heading level (`##` parent sections, `###` child subsections) with table-block preservation (`| ... |`) so markdown table headers and rows are never severed across chunk boundaries. PDF docs generate parent context windows (~2000 chars) for complete LLM section context linked to precise child retrieval windows (~600 chars) via `parent_id`.
+- **Smart Intent Guardrails & Pre-Retrieval Routing.** Fast intent classification checks incoming queries before vector search runs, routing non-policy questions away from retrieval:
+  - *Greetings*: Inputs like `"hi"` or `"hello"` receive instant friendly welcome responses.
+  - *Out-of-Scope*: General trivia, math, or coding queries receive polite guidance explaining PolicyGuard's policy domain.
+  - *Ambiguity Clarification*: Overly broad questions (*"tell me the policy"*) prompt the user to specify their policy topic area (Leave, WFH, IT, Expenses).
 - **Hybrid retrieval, not just vector similarity.** Dense embedding search (Chroma) and BM25
   keyword search run over the same corpus and are fused with Reciprocal Rank Fusion, so an exact
   keyword match doesn't lose to a semantically-similar-but-wrong chunk. Fused candidates are then
@@ -157,7 +163,7 @@ policyguard/
 │   ├── ingestion/                # Loading, chunking, Chroma vector store
 │   │   ├── loader.py             #   Markdown: parses YAML front matter + body
 │   │   ├── pdf_loader.py         #   PDF: extracts text, reads sidecar .yaml (or guesses defaults)
-│   │   ├── chunker.py            #   Markdown: ## → parent, ### → child. PDF: flat windows
+│   │   ├── chunker.py            #   Markdown: ## → parent, ### → child + table preservation. PDF: parent-child windows
 │   │   ├── vectorstore.py        #   Chroma-backed store: query, get-by-id, get-all, delete
 │   │   └── ingest.py             #   CLI: ingest docs (.md or .pdf) / run a raw retrieval query
 │   ├── generation/                # Linear "baseline" generate-with-citations chain
@@ -171,7 +177,7 @@ policyguard/
 │   │   └── reranker.py             #   Cohere rerank wrapper
 │   ├── orchestration/               # The LangGraph StateGraph
 │   │   ├── state.py                 #   GraphState schema
-│   │   ├── nodes.py                 #   every node + routing function
+│   │   ├── nodes.py                 #   nodes, intent classifiers (greeting/out-of-scope/ambiguity), routing
 │   │   ├── graph.py                 #   graph wiring / compilation
 │   │   ├── ask.py                   #   CLI: ask a question through the graph
 │   │   └── resolve.py               #   CLI: resume a paused/escalated conversation
@@ -183,8 +189,8 @@ policyguard/
 │   │   ├── app.py                     #   /ask, /resolve, /health
 │   │   └── schemas.py                 #   request/response pydantic models
 │   └── ui/                           # Minimal Streamlit UI
-│       └── app.py                     #   chat UI calling the API, incl. review approve/edit/reject
-└── tests/                              # 84 tests, one file per module above
+│       └── app.py                     #   chat UI calling the API, incl. review approve/edit/reject & clear chat
+└── tests/                              # 100 tests, one file per module above
 ```
 
 ## Getting started
@@ -232,8 +238,7 @@ no YAML front matter and no `##`/`###` heading structure to hierarchically chunk
   slugified from the stem, `department` guessed from keywords like "hr"/"security"/"finance",
   `effective_date` defaulted to today, `version` to `"1.0"`), with a printed warning so it's
   obvious the values were guessed rather than authored.
-- **Chunking** falls back to flat, fixed-size, paragraph-aware, overlapping windows (no
-  parent/child section split) — each window cited as `[source: doc_id, Part N]`.
+- **Chunking** generates parent context windows (~2000 chars) for full generation context and child retrieval windows (~600 chars) linked via `parent_id` — each section cited as `[source: doc_id, Part N]` with table structure (`| ... |`) preserved.
 
 Text extraction uses `pypdf` (pure Python, no compiled/native dependencies). Ingest exactly the
 same way — the CLI auto-detects file type by extension:
