@@ -29,12 +29,17 @@ from policyguard.retrieval.reranker import CohereReranker
 
 DEFAULT_CHECKPOINT_DB = Path("./checkpoints.sqlite")
 
+# How many prior Q&A turns to keep feeding into rewrite_query in interactive mode, so a long
+# session's prompt doesn't grow unbounded.
+MAX_HISTORY_TURNS = 6
+
 
 def print_result(result: dict, thread_id: str) -> None:
-    if "__interrupt__" in result:
-        payload = result["__interrupt__"][0].value
+    if "__interrupt__" in result and result["__interrupt__"]:
+        raw_item = result["__interrupt__"][0]
+        payload = raw_item.get("value", raw_item) if isinstance(raw_item, dict) else getattr(raw_item, "value", raw_item)
         print("Draft answer (unverified, pending human review):")
-        print(f"  {payload['draft_answer']}")
+        print(f"  {payload.get('draft_answer', '')}")
         print("\n[!] Could not verify this answer as grounded after retries.")
         print(f"    thread id: {thread_id}")
         print(
@@ -58,7 +63,10 @@ def print_result(result: dict, thread_id: str) -> None:
 
 def _run_interactive(app) -> None:
     print("PolicyGuard -- full agentic pipeline (hybrid retrieval + grading + hallucination check)")
-    print("Ask a policy question. Type 'exit', 'quit', or Ctrl+D to stop.\n")
+    print("Ask a policy question. Follow-ups like 'does this apply to interns' can refer back to")
+    print("earlier questions in this session. Type 'exit', 'quit', or Ctrl+D to stop.\n")
+
+    history: list[dict] = []
 
     while True:
         try:
@@ -75,10 +83,15 @@ def _run_interactive(app) -> None:
 
         thread_id = str(uuid.uuid4())
         config = {"configurable": {"thread_id": thread_id}}
-        result = app.invoke(initial_state(question), config=config)
+        result = app.invoke(initial_state(question, history=history), config=config)
         print()
         print_result(result, thread_id)
         print()
+
+        # A paused/escalated turn isn't resolved within this loop, so its outcome is unknown --
+        # leave it out of history rather than record an unverified draft as if it were final.
+        if "__interrupt__" not in result:
+            history = (history + [{"question": question, "answer": result["answer"]}])[-MAX_HISTORY_TURNS:]
 
 
 def main() -> None:

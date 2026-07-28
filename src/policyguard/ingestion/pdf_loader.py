@@ -42,10 +42,59 @@ _DEPARTMENT_KEYWORDS = [
 ]
 
 
-def extract_pdf_text(path: Path) -> str:
+MIN_TEXT_PER_PAGE = 30
+
+_ocr_engine = None
+
+
+def _get_ocr_engine():
+    global _ocr_engine
+    if _ocr_engine is None:
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+
+            _ocr_engine = RapidOCR()
+        except Exception as e:
+            print(f"  [!] Failed to initialize RapidOCR engine: {e}")
+            _ocr_engine = False
+    return _ocr_engine if _ocr_engine is not False else None
+
+
+def _perform_ocr_on_page(pdf_path: Path, page_index: int) -> str:
+    engine = _get_ocr_engine()
+    if engine is None:
+        return ""
+    try:
+        import numpy as np
+        import pypdfium2 as pdfium
+
+        pdf = pdfium.PdfDocument(str(pdf_path))
+        page = pdf[page_index]
+        image = page.render(scale=2).to_pil()
+        ocr_result, _ = engine(np.array(image))
+        if not ocr_result:
+            return ""
+        lines = [line[1] for line in ocr_result if line and len(line) >= 2 and line[1]]
+        return "\n".join(lines).strip()
+    except Exception as e:
+        print(f"  [!] OCR processing error on page {page_index + 1} of {pdf_path.name}: {e}")
+        return ""
+
+
+def extract_pdf_text(path: Path, min_text_per_page: int = MIN_TEXT_PER_PAGE) -> str:
     reader = PdfReader(str(path))
-    pages = [page.extract_text() or "" for page in reader.pages]
-    return "\n\n".join(pages).strip()
+    page_texts: list[str] = []
+
+    for i, page in enumerate(reader.pages):
+        text = (page.extract_text() or "").strip()
+        if len(text) < min_text_per_page:
+            ocr_text = _perform_ocr_on_page(path, i)
+            if ocr_text:
+                text = f"{text}\n\n{ocr_text}".strip() if text else ocr_text
+        if text:
+            page_texts.append(text)
+
+    return "\n\n".join(page_texts).strip()
 
 
 def _slugify_doc_id(stem: str) -> str:

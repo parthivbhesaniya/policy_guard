@@ -7,9 +7,18 @@ from typing import Literal
 from pydantic import BaseModel
 
 
+class HistoryTurn(BaseModel):
+    question: str
+    answer: str
+
+
 class AskRequest(BaseModel):
     question: str
     thread_id: str | None = None
+    # Prior turns of this conversation, oldest first -- used only to resolve references like
+    # "this"/"it" in `question` into a standalone search query. The API is otherwise stateless
+    # across calls, so the caller (UI/CLI) is responsible for accumulating and resending this.
+    history: list[HistoryTurn] = []
 
 
 class CitationOut(BaseModel):

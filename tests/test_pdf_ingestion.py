@@ -152,3 +152,51 @@ def test_slugify_doc_id_falls_back_when_nothing_alphanumeric():
 )
 def test_guess_department_from_filename(filename, expected_department):
     assert _guess_department(filename) == expected_department
+
+
+# --- extract_pdf_text and OCR fallback -----------------------------------------------------
+
+
+def test_extract_pdf_text_uses_native_text_when_sufficient(tmp_path, monkeypatch):
+    class FakePage:
+        def extract_text(self):
+            return "This is a sufficiently long native text page in a searchable PDF."
+
+    class FakeReader:
+        def __init__(self, path):
+            self.pages = [FakePage()]
+
+    monkeypatch.setattr("policyguard.ingestion.pdf_loader.PdfReader", FakeReader)
+    ocr_called = False
+
+    def fake_ocr(pdf_path, page_index):
+        nonlocal ocr_called
+        ocr_called = True
+        return "OCR Text"
+
+    monkeypatch.setattr("policyguard.ingestion.pdf_loader._perform_ocr_on_page", fake_ocr)
+
+    from policyguard.ingestion.pdf_loader import extract_pdf_text
+
+    result = extract_pdf_text(tmp_path / "sample.pdf")
+    assert "sufficiently long native text" in result
+    assert not ocr_called
+
+
+def test_extract_pdf_text_triggers_ocr_when_page_text_is_sparse(tmp_path, monkeypatch):
+    class FakePage:
+        def extract_text(self):
+            return ""  # Empty text simulating scanned page
+
+    class FakeReader:
+        def __init__(self, path):
+            self.pages = [FakePage()]
+
+    monkeypatch.setattr("policyguard.ingestion.pdf_loader.PdfReader", FakeReader)
+    monkeypatch.setattr("policyguard.ingestion.pdf_loader._perform_ocr_on_page", lambda pdf_path, idx: "Scanned OCR Text Content")
+
+    from policyguard.ingestion.pdf_loader import extract_pdf_text
+
+    result = extract_pdf_text(tmp_path / "scanned.pdf")
+    assert result == "Scanned OCR Text Content"
+

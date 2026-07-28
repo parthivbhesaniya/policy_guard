@@ -15,6 +15,13 @@ from typing import TypedDict
 
 class GraphState(TypedDict):
     question: str
+    # Prior turns of the same conversation -- [{"question": ..., "answer": ...}, ...], oldest
+    # first. Populated by the caller (CLI/API/UI), not the graph itself: each `invoke()` is one
+    # independent question, so nothing here appends to it automatically. Consumed only by
+    # `rewrite_query`, to resolve references like "this"/"it"/"the same policy" into a
+    # standalone search query -- it is deliberately NOT passed to `generate`, so every answer
+    # still comes only from retrieved, graded policy excerpts rather than conversational memory.
+    history: list[dict]
     rewritten_query: str
     documents: list[dict]
     graded_documents: list[dict]

@@ -44,6 +44,7 @@ def build_graph(
 
     graph = StateGraph(GraphState)
     graph.add_node("rewrite_query", partial(nodes.rewrite_query, llm=llm))
+    graph.add_node("handle_greeting", nodes.handle_greeting)
     graph.add_node("retrieve", partial(nodes.retrieve, retriever=retriever, reranker=reranker, k=k, fetch_k=fetch_k))
     graph.add_node("grade_documents", partial(nodes.grade_documents, llm=llm))
     graph.add_node("generate", partial(nodes.generate, llm=llm))
@@ -52,7 +53,12 @@ def build_graph(
     graph.add_node("escalate_to_human", nodes.escalate_to_human)
 
     graph.set_entry_point("rewrite_query")
-    graph.add_edge("rewrite_query", "retrieve")
+    graph.add_conditional_edges(
+        "rewrite_query",
+        nodes.route_after_rewrite,
+        {"handle_greeting": "handle_greeting", "retrieve": "retrieve"},
+    )
+    graph.add_edge("handle_greeting", END)
     graph.add_edge("retrieve", "grade_documents")
     graph.add_conditional_edges(
         "grade_documents",
@@ -71,9 +77,10 @@ def build_graph(
     return graph.compile(checkpointer=checkpointer)
 
 
-def initial_state(question: str) -> GraphState:
+def initial_state(question: str, history: list[dict] | None = None) -> GraphState:
     return GraphState(
         question=question,
+        history=history or [],
         rewritten_query="",
         documents=[],
         graded_documents=[],

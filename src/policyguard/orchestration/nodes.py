@@ -42,14 +42,21 @@ def _block_from_dict(data: dict) -> ContextBlock:
 def _citation_to_dict(citation: Citation) -> dict:
     return {"doc_id": citation.doc_id, "section": citation.section}
 
-REWRITE_PROMPT = """Rewrite the employee's question below into a clear, specific search query \
-for retrieving relevant sections from the company's internal HR/IT documents.
+REWRITE_PROMPT = """Rewrite the employee's latest question below into a clear, specific, \
+standalone search query for retrieving relevant sections from the company's internal HR/IT \
+documents.
 
 Keep it short, and preserve any specific nouns, names, or entities already in the question --
 do not add generic words like "policy" unless the question is already specifically about a
 policy's rules (e.g. don't turn "what is the company name" into "company name policy"; that
-changes what's being asked for). If the question is already clear and specific, return it
-unchanged.
+changes what's being asked for). If the latest question is already clear and specific on its
+own, return it unchanged.
+
+If the latest question refers back to the conversation so far (e.g. "this", "that", "it", "the
+same policy", "what about interns"), use the conversation to make the rewritten query stand on
+its own -- e.g. a conversation about the annual leave policy followed by "does this apply to
+interns" should become "does the annual leave policy apply to interns". Only use the
+conversation to resolve such references; don't pull in unrelated details from earlier turns.
 
 Return ONLY the rewritten query, with no explanation or quotation marks."""
 
@@ -88,8 +95,62 @@ def _invoke_text(llm: BaseChatModel, system: str, user: str) -> str:
     return response.content if isinstance(response.content, str) else str(response.content)
 
 
+def _format_history(history: list[dict]) -> str:
+    if not history:
+        return ""
+    turns = "\n\n".join(f"Q: {turn['question']}\nA: {turn['answer']}" for turn in history)
+    return f"Conversation so far:\n{turns}\n\n"
+
+
+_GREETING_REGEX = re.compile(
+    r"^(hi|hello|hey|heya|howdy|greetings|good\s+(morning|afternoon|evening)|thanks|thank\s+you|bye|goodbye|who\s+are\s+you|what\s+can\s+you\s+do)[\s!.,?]*$",
+    re.IGNORECASE,
+)
+
+_POLICY_KEYWORDS = {
+    "policy", "wfh", "leave", "vacation", "remote", "sick", "salary", "pay",
+    "insurance", "notice", "probation", "work", "office", "laptop", "password",
+    "it", "hr", "allowance", "expense", "benefit", "claim", "reimbursement"
+}
+
+
+def is_greeting(text: str) -> bool:
+    cleaned = text.strip().lower()
+    if _GREETING_REGEX.match(cleaned):
+        return True
+    words = set(re.findall(r"\b\w+\b", cleaned))
+    if len(words) <= 3 and any(w in {"hi", "hello", "hey", "greetings", "thanks", "thank"} for w in words):
+        if not words.intersection(_POLICY_KEYWORDS):
+            return True
+    return False
+
+
+def route_after_rewrite(state: GraphState) -> str:
+    if is_greeting(state["question"]) or is_greeting(state.get("rewritten_query", "")):
+        return "handle_greeting"
+    return "retrieve"
+
+
+def handle_greeting(state: GraphState, config: RunnableConfig | None = None) -> dict:
+    answer_text = (
+        "Hello! I am PolicyGuard, your assistant for company HR and IT policy questions. "
+        "How can I help you today?"
+    )
+    token_queue = (config or {}).get("configurable", {}).get("token_queue")
+    if token_queue is not None:
+        token_queue.put(answer_text)
+    return {
+        "answer": answer_text,
+        "citations": [],
+        "invalid_citations": [],
+        "grounded": True,
+    }
+
+
 def rewrite_query(state: GraphState, llm: BaseChatModel) -> dict:
-    rewritten = _invoke_text(llm, REWRITE_PROMPT, state["question"]).strip().strip('"')
+    history_block = _format_history(state.get("history", []))
+    user_prompt = f"{history_block}Latest question: {state['question']}"
+    rewritten = _invoke_text(llm, REWRITE_PROMPT, user_prompt).strip().strip('"')
     return {"rewritten_query": rewritten or state["question"]}
 
 
@@ -130,7 +191,10 @@ def grade_documents(state: GraphState, llm: BaseChatModel) -> dict:
         return {"graded_documents": []}
 
     excerpts = "\n\n".join(f"[{i}] ({d.doc_id}, {d.section})\n{d.text}" for i, d in enumerate(documents))
-    prompt = GRADE_PROMPT_TEMPLATE.format(question=state["question"], excerpts=excerpts)
+    # Uses the disambiguated `rewritten_query`, not the raw `question` -- a follow-up like "does
+    # this apply to interns" is meaningless to the grader on its own, even though the excerpts
+    # retrieved for it are the right ones.
+    prompt = GRADE_PROMPT_TEMPLATE.format(question=state["rewritten_query"], excerpts=excerpts)
     raw = _invoke_text(llm, "You are a strict but fair relevance grader.", prompt)
     indices = parse_relevant_indices(raw, len(documents))
 
@@ -149,9 +213,26 @@ def cannot_answer(state: GraphState) -> dict:
     }
 
 
-def generate(state: GraphState, llm: BaseChatModel) -> dict:
+from langchain_core.runnables import RunnableConfig
+
+
+def generate(state: GraphState, llm: BaseChatModel, config: RunnableConfig | None = None) -> dict:
     context_blocks = [_block_from_dict(d) for d in state["graded_documents"]]
-    answer_text = _invoke_text(llm, SYSTEM_PROMPT, build_user_prompt(state["question"], context_blocks))
+    messages = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content=build_user_prompt(state["rewritten_query"], context_blocks)),
+    ]
+
+    token_queue = (config or {}).get("configurable", {}).get("token_queue")
+    if token_queue is not None:
+        chunks = []
+        for chunk in llm.stream(messages):
+            text = chunk.content if isinstance(chunk.content, str) else str(chunk.content)
+            chunks.append(text)
+            token_queue.put(text)
+        answer_text = "".join(chunks)
+    else:
+        answer_text = _invoke_text(llm, SYSTEM_PROMPT, build_user_prompt(state["rewritten_query"], context_blocks))
 
     available = {(b.doc_id, b.section) for b in context_blocks}
     valid, invalid = validate_citations(parse_citations(answer_text), available)

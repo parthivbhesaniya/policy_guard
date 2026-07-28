@@ -22,6 +22,7 @@ handling real policy questions.
   - [Project structure](#project-structure)
   - [Getting started](#getting-started)
   - [PDF support](#pdf-support)
+  - [Managing policy documents](#managing-policy-documents)
   - [Usage](#usage)
   - [API \& UI](#api--ui)
   - [Testing](#testing)
@@ -61,7 +62,7 @@ data/policies/*.md                 data/eval/golden_dataset.json
 ┌────────────────────────────────────────────────────┴────────────┐
 │                 LangGraph Orchestrator (StateGraph)              │
 │                                                                    │
-│  rewrite_query → retrieve (hybrid: dense + BM25 → Cohere rerank)  │
+│  rewrite_query (+ conv. history) → retrieve (dense + BM25 → rerank) │
 │       → grade_documents ──(nothing relevant)──► cannot_answer     │
 │       │ (relevant docs found)                                     │
 │       ▼                                                           │
@@ -101,6 +102,14 @@ Every arrow above is a real, tested code path — not aspirational. See
   `[source: doc_id, section]` tag, and a citation isn't trusted just because the model wrote it —
   it's checked against the actual retrieved context, and a citation pointing at content that was
   never retrieved is treated as a grounding failure, not a cosmetic one.
+- **Conversational follow-ups, without letting the model answer from memory.** A caller (CLI,
+  API, or UI) can pass prior Q&A turns alongside a new question, and `rewrite_query` uses them
+  to resolve references like "does *this* apply to interns" or "what about *that*" into a
+  standalone search query. The resolved query — not the raw, ambiguous one — is what grading and
+  generation see, so retrieval and citation-checking work correctly on a follow-up. Conversation
+  history is deliberately *never* shown to `generate` itself: every claim in the final answer
+  still has to come from retrieved, graded policy excerpts, not from something said earlier in
+  the chat.
 - **A hallucination check that can act on what it finds.** A second LLM pass verifies the
   generated answer is fully supported by the retrieved context. If not, the graph loops back to
   `generate` (bounded retries) before giving up — it doesn't just log a "low confidence" score
@@ -135,7 +144,7 @@ Every arrow above is a real, tested code path — not aspirational. See
 | Config | **python-dotenv** | Loads API keys from a gitignored `.env` — nothing secret is hardcoded or committed. |
 | API | **FastAPI** | Thin HTTP wrapper around the same compiled graph the CLI uses — `/ask` and `/resolve`, including the interrupt/resume flow, over a stable JSON contract instead of stdin/stdout. |
 | UI | **Streamlit** | Minimal chat UI on top of the API — question in, cited answer out, with approve/edit/reject controls when a thread pauses for human review. |
-| Testing | **pytest** | 84 tests across every layer, built almost entirely on fakes (`FakeLLM`, `FakeCohereClient`) and real-but-temporary Chroma stores (`tmp_path`) instead of mocking/patching internals. |
+| Testing | **pytest** | 91 tests across every layer, built almost entirely on fakes (`FakeLLM`, `FakeCohereClient`) and real-but-temporary Chroma stores (`tmp_path`) instead of mocking/patching internals. |
 
 ## Project structure
 
@@ -233,6 +242,48 @@ same way — the CLI auto-detects file type by extension:
 python -m policyguard.ingestion.ingest --input data/policies --persist-dir ./chroma_db
 ```
 
+## Managing policy documents
+
+Ingestion always `upsert`s — it can add or update, but it never removes. Whether re-running it
+after a change is enough, or you need to clean up manually, depends on what changed:
+
+| You changed... | What to do | Why |
+| --- | --- | --- |
+| Content within an existing section (same file, same `doc_id`, same heading) | Just re-run ingestion | Chunk IDs are deterministic hashes of `doc_id` + section title, so the same chunk gets overwritten in place. Safe, idempotent, no cleanup needed. |
+| A section's heading text, or removed a section | Re-run ingestion, **then** manually remove the orphaned chunk | The old heading produces a different chunk ID than the new one, so the old chunk is never overwritten — it just sits there, findable by retrieval, pointing at content that no longer exists in the source file. |
+| A `doc_id` (front matter, sidecar YAML, or a PDF filename with no sidecar — its `doc_id` is guessed from the filename) | Delete the **old** `doc_id` before or after ingesting under the new one | Same root cause as above, at the whole-document level: the store now has two `doc_id`s for what you consider one logical document. |
+| Removed a policy file entirely | Delete its `doc_id` | Ingestion only ever processes files it currently finds in `--input` — it has no notion of "this used to exist and doesn't anymore." |
+
+There's no CLI command for cleanup yet — do it directly:
+
+```bash
+python -c "
+from pathlib import Path
+from policyguard.ingestion.vectorstore import PolicyVectorStore
+
+store = PolicyVectorStore(Path('./chroma_db'))
+store.delete_document('the-old-doc-id')
+"
+```
+
+To see what's actually in the store (useful before deleting anything, or after a re-ingest to
+sanity-check what landed):
+
+```bash
+python -c "
+from pathlib import Path
+from collections import Counter
+from policyguard.ingestion.vectorstore import PolicyVectorStore
+
+store = PolicyVectorStore(Path('./chroma_db'))
+_, _, metadatas = store.get_all_children()
+print(Counter(m['doc_id'] for m in metadatas))
+"
+```
+
+This gap (upsert-only, no automatic pruning of stale `doc_id`s) is a known limitation — see
+[Engineering highlights](#engineering-highlights) for two real incidents it caused.
+
 ## Usage
 
 **Raw retrieval only** (no LLM, sanity-checks ingestion):
@@ -249,9 +300,12 @@ python -m policyguard.generation.ask "how many carryover leave days am I allowed
 ```bash
 python -m policyguard.orchestration.ask "how many carryover leave days am I allowed"
 python -m policyguard.orchestration.ask "..." --no-rerank   # skip Cohere, no key needed
+python -m policyguard.orchestration.ask   # omit the question for interactive mode
 ```
 If the answer can't be verified as grounded after retries, this prints a `thread id` and pauses
-instead of returning an answer.
+instead of returning an answer. Interactive mode remembers the session's prior questions and
+answers, so a follow-up like "does this apply to interns" resolves against what was already
+asked (see [Key features](#key-features)).
 
 **Resolve a paused/escalated conversation** (a separate process, proving real resumability):
 ```bash
@@ -279,13 +333,19 @@ uvicorn policyguard.api.app:app --reload
 
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
-| `/ask` | POST | `{"question": "..."}` → `{"status": "answered" \| "cannot_answer" \| "needs_review", "answer": ..., "citations": [...], ...}` |
+| `/ask` | POST | `{"question": "...", "history": [...]}` → `{"status": "answered" \| "cannot_answer" \| "needs_review", "answer": ..., "citations": [...], ...}` |
 | `/resolve` | POST | `{"thread_id": ..., "action": "approve" \| "edit" \| "reject", "answer": ...}` — resumes a thread paused by `/ask` |
 | `/health` | GET | Liveness check |
 
 A `needs_review` response means the answer couldn't be verified as grounded after retries; it's
 paused (checkpointed, exactly like the CLI's escalation) until a `/resolve` call decides its fate
 — from the same request, a later one, or an entirely different client.
+
+`history` is optional and defaults to `[]` — pass prior turns
+(`[{"question": ..., "answer": ...}, ...]`, oldest first) so a follow-up question like "does this
+apply to interns" can be resolved against what was already asked. The API is otherwise stateless
+across calls, so accumulating and resending history is the caller's responsibility — the
+Streamlit UI does this automatically from its own chat history.
 
 A minimal Streamlit UI sits on top of the API — a chat box in, a cited answer out, with
 approve/edit/reject buttons that appear automatically when a thread pauses for review:
@@ -301,7 +361,7 @@ streamlit run src/policyguard/ui/app.py
 pytest
 ```
 
-84 tests, ~15 seconds, zero live API calls:
+91 tests, ~16 seconds, zero live API calls:
 
 | File | Tests | Covers |
 | --- | --- | --- |
@@ -310,7 +370,7 @@ pytest
 | `test_chain.py` | 5 | Context-block deduping, prompt construction |
 | `test_citations.py` | 4 | Citation parsing + validation |
 | `test_retrieval.py` | 9 | BM25 exact-match, RRF fusion, Cohere reranker (via fake client) |
-| `test_orchestration.py` | 23 | Every node, every routing decision, full-graph integration incl. interrupt/resume, via a `FakeLLM` |
+| `test_orchestration.py` | 30 | Every node, every routing decision, conversation-history resolution, full-graph integration incl. interrupt/resume, via a `FakeLLM` |
 | `test_evaluation.py` | 16 | Dataset integrity, both programmatic metrics, both LLM-judge metrics (via fake LLM) |
 | `test_vectorstore.py` | 2 | `delete_document` removes only the targeted doc's chunks, no-ops for an unknown doc id |
 
@@ -358,6 +418,22 @@ LLM, not just reading the architecture doc:
   installable wheel for an Intel/x86_64 Mac on Python 3.13 (recent PyTorch macOS builds are
   Apple-Silicon-only). Rather than forcing it, reranking moved to a hosted API (Cohere) behind
   the same interface, with a `--no-rerank` escape hatch that needs no key at all.
+- **Found a second stale-context bug while adding conversational memory.** After wiring
+  conversation history into `rewrite_query`, a live follow-up question ("does this apply to
+  interns") still failed — retrieval found the right excerpt, but `grade_documents` and
+  `generate` were still being prompted with the raw, ambiguous question text, not the
+  disambiguated `rewritten_query`. The grader/generator has no access to conversation history by
+  design (so answers can't smuggle in unretrieved "facts" from earlier in the chat), so an
+  unresolved "this" was unanswerable to them even with the correct excerpt in hand. Fixed by
+  routing `rewritten_query` through both nodes instead of `question`.
+- **Caught a corpus contamination issue the same follow-up question exposed.** Even after that
+  fix, the same live question came back wrong until digging into what was actually retrieved: the
+  vector store held chunks from two unrelated organizations' HR policies under different
+  `doc_id`s (the real company policy, plus an unrelated government HR manual that had been
+  ingested at some point) — Cohere's reranker had no way to know which org "this" referred to, so
+  it silently arbitrated between them. `delete_document()` (added earlier for a different
+  duplicate) removed the stray document; confirms that data hygiene, not model capability, was
+  the recurring root cause across multiple debugging sessions.
 - **Idempotent ingestion by construction.** Chunk IDs are deterministic hashes of `doc_id` +
   slugified section title, and storage uses `upsert`, not `add` — re-running ingestion on
   unchanged docs is a safe no-op rather than a source of duplicate vectors. Upserting alone never

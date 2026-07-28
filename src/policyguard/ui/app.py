@@ -6,10 +6,15 @@ Run the API first (see README), then:
 
 from __future__ import annotations
 
+import json
 import requests
 import streamlit as st
 
 DEFAULT_API_URL = "http://localhost:8000"
+
+# How many prior Q&A turns to send back to the API for reference-resolution (e.g. "does this
+# apply to interns"), bounding how much the rewrite-query prompt grows over a long session.
+MAX_HISTORY_TURNS = 6
 
 st.set_page_config(page_title="PolicyGuard", page_icon="📄")
 st.title("PolicyGuard")
@@ -43,19 +48,70 @@ def render_response(response: dict) -> None:
         st.caption("Reviewed by a human before being returned.")
 
 
+def _history_payload() -> list[dict]:
+    turns = st.session_state.history[-MAX_HISTORY_TURNS:]
+    return [{"question": t["question"], "answer": t["response"]["answer"]} for t in turns]
+
+
 def ask(question: str) -> None:
+    payload = {"question": question, "history": _history_payload()}
+
+    status_box = st.status("Analyzing question...", expanded=True)
+    message_placeholder = st.empty()
+
+    final_data = None
+    full_text = ""
+
     try:
-        resp = requests.post(f"{api_url}/ask", json={"question": question}, timeout=120)
+        resp = requests.post(f"{api_url}/ask/stream", json=payload, stream=True, timeout=120)
         resp.raise_for_status()
-    except requests.RequestException as exc:
+
+        for line in resp.iter_lines():
+            if not line:
+                continue
+            line_str = line.decode("utf-8")
+            if line_str.startswith("data: "):
+                event = json.loads(line_str[6:])
+                evt_type = event.get("type")
+                if evt_type == "status":
+                    status_box.update(label=event["content"], state="running")
+                elif evt_type == "token":
+                    full_text += event["content"]
+                    message_placeholder.markdown(full_text + "▌")
+                elif evt_type == "final":
+                    final_data = event["data"]
+                    status_box.update(label="Complete", state="complete", expanded=False)
+                elif evt_type == "error":
+                    st.error(f"Error: {event['content']}")
+                    status_box.update(label="Error", state="error")
+                    return
+
+    except Exception as exc:
         st.error(f"Request to PolicyGuard API failed: {exc}")
+        status_box.update(label="Failed", state="error")
         return
 
-    data = resp.json()
-    if data["status"] == "needs_review":
-        st.session_state.pending = {"thread_id": data["thread_id"], "question": question, "response": data}
-    else:
-        st.session_state.history.append({"question": question, "response": data})
+    if final_data:
+        message_placeholder.markdown(final_data.get("answer") or full_text or "*(no answer)*")
+
+        citations = final_data.get("citations") or []
+        if citations:
+            st.caption("Sources: " + ", ".join(f"{c['doc_id']} · {c['section']}" for c in citations))
+
+        invalid = final_data.get("invalid_citations") or []
+        if invalid:
+            st.warning(
+                "Model cited sources not present in the retrieved context: "
+                + ", ".join(f"{c['doc_id']} · {c['section']}" for c in invalid)
+            )
+
+        if final_data.get("status") == "cannot_answer":
+            st.info("No relevant policy documents were found for this question.")
+
+        if final_data["status"] == "needs_review":
+            st.session_state.pending = {"thread_id": final_data["thread_id"], "question": question, "response": final_data}
+        else:
+            st.session_state.history.append({"question": question, "response": final_data})
 
 
 def resolve(action: str, answer: str | None = None) -> None:
