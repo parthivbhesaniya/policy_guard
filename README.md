@@ -23,6 +23,7 @@ handling real policy questions.
   - [Getting started](#getting-started)
   - [PDF support](#pdf-support)
   - [Usage](#usage)
+  - [API \& UI](#api--ui)
   - [Testing](#testing)
   - [Evaluation \& results](#evaluation--results)
   - [Engineering highlights](#engineering-highlights)
@@ -132,7 +133,9 @@ Every arrow above is a real, tested code path — not aspirational. See
 | Persistence | **langgraph-checkpoint-sqlite** | Durable, on-disk checkpointing of full graph state per `thread_id`, so paused conversations survive process restarts. |
 | Evaluation & tracing | **LangSmith** | Optional hosted experiment tracking: uploads the golden dataset once, then logs each evaluation run as a comparable, traced experiment. |
 | Config | **python-dotenv** | Loads API keys from a gitignored `.env` — nothing secret is hardcoded or committed. |
-| Testing | **pytest** | 74 tests across every layer, built almost entirely on fakes (`FakeLLM`, `FakeCohereClient`) and real-but-temporary Chroma stores (`tmp_path`) instead of mocking/patching internals. |
+| API | **FastAPI** | Thin HTTP wrapper around the same compiled graph the CLI uses — `/ask` and `/resolve`, including the interrupt/resume flow, over a stable JSON contract instead of stdin/stdout. |
+| UI | **Streamlit** | Minimal chat UI on top of the API — question in, cited answer out, with approve/edit/reject controls when a thread pauses for human review. |
+| Testing | **pytest** | 84 tests across every layer, built almost entirely on fakes (`FakeLLM`, `FakeCohereClient`) and real-but-temporary Chroma stores (`tmp_path`) instead of mocking/patching internals. |
 
 ## Project structure
 
@@ -144,9 +147,9 @@ policyguard/
 ├── src/policyguard/
 │   ├── ingestion/                # Loading, chunking, Chroma vector store
 │   │   ├── loader.py             #   Markdown: parses YAML front matter + body
-│   │   ├── pdf_loader.py         #   PDF: extracts text, reads sidecar .yaml metadata
+│   │   ├── pdf_loader.py         #   PDF: extracts text, reads sidecar .yaml (or guesses defaults)
 │   │   ├── chunker.py            #   Markdown: ## → parent, ### → child. PDF: flat windows
-│   │   ├── vectorstore.py        #   Chroma-backed store: query, get-by-id, get-all
+│   │   ├── vectorstore.py        #   Chroma-backed store: query, get-by-id, get-all, delete
 │   │   └── ingest.py             #   CLI: ingest docs (.md or .pdf) / run a raw retrieval query
 │   ├── generation/                # Linear "baseline" generate-with-citations chain
 │   │   ├── chain.py               #   retrieve → prompt → LLM → validate citations
@@ -163,11 +166,16 @@ policyguard/
 │   │   ├── graph.py                 #   graph wiring / compilation
 │   │   ├── ask.py                   #   CLI: ask a question through the graph
 │   │   └── resolve.py               #   CLI: resume a paused/escalated conversation
-│   └── evaluation/                   # Golden dataset + evaluators
-│       ├── dataset.py                 #   golden example loader
-│       ├── evaluators.py              #   recall@k, citation_accuracy, faithfulness, answer_relevance
-│       └── run_eval.py                #   CLI: local scorecard or LangSmith experiment
-└── tests/                              # 74 tests, one file per module above
+│   ├── evaluation/                   # Golden dataset + evaluators
+│   │   ├── dataset.py                 #   golden example loader
+│   │   ├── evaluators.py              #   recall@k, citation_accuracy, faithfulness, answer_relevance
+│   │   └── run_eval.py                #   CLI: local scorecard or LangSmith experiment
+│   ├── api/                          # FastAPI wrapper around the compiled graph
+│   │   ├── app.py                     #   /ask, /resolve, /health
+│   │   └── schemas.py                 #   request/response pydantic models
+│   └── ui/                           # Minimal Streamlit UI
+│       └── app.py                     #   chat UI calling the API, incl. review approve/edit/reject
+└── tests/                              # 84 tests, one file per module above
 ```
 
 ## Getting started
@@ -176,7 +184,7 @@ policyguard/
 git clone <repo-url> && cd policyguard
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev,ui]"   # add `,ui` only if you want the Streamlit UI
 
 cp .env.example .env
 # then edit .env and add your API keys (see below)
@@ -202,14 +210,19 @@ python -m policyguard.ingestion.ingest --input data/policies --persist-dir ./chr
 `data/policies/` (or any `--input` directory) can mix `.md` and `.pdf` policy docs. A PDF has
 no YAML front matter and no `##`/`###` heading structure to hierarchically chunk by, so:
 
-- **Metadata** comes from a sidecar YAML file with the same name: `finance_policy.pdf` needs a
-  `finance_policy.yaml` next to it, with the same four required fields as Markdown front matter:
+- **Metadata** comes from an optional sidecar YAML file with the same name: `finance_policy.pdf` +
+  `finance_policy.yaml`, with the same four fields as Markdown front matter:
   ```yaml
   doc_id: finance-expense-policy
   department: Finance
   effective_date: 2026-01-01
   version: 1.0
   ```
+  If a sidecar exists, all four fields are required. If there's no sidecar at all, a PDF can
+  still be dropped in with zero setup — metadata is auto-generated from the filename (`doc_id`
+  slugified from the stem, `department` guessed from keywords like "hr"/"security"/"finance",
+  `effective_date` defaulted to today, `version` to `"1.0"`), with a printed warning so it's
+  obvious the values were guessed rather than authored.
 - **Chunking** falls back to flat, fixed-size, paragraph-aware, overlapping windows (no
   parent/child section split) — each window cited as `[source: doc_id, Part N]`.
 
@@ -253,23 +266,53 @@ python -m policyguard.evaluation.run_eval                # local scorecard
 python -m policyguard.evaluation.run_eval --langsmith     # + tracked LangSmith experiment
 ```
 
+## API & UI
+
+A FastAPI service exposes the same compiled LangGraph app the CLI uses, over HTTP instead of
+stdin/stdout — same hybrid retrieval, grading, hallucination check, and human-in-the-loop
+escalation, just a different front door. Setup (Chroma connection, BM25 index, LLM, checkpointer,
+graph compilation) happens once at process startup and is shared across every request.
+
+```bash
+uvicorn policyguard.api.app:app --reload
+```
+
+| Endpoint | Method | Purpose |
+| --- | --- | --- |
+| `/ask` | POST | `{"question": "..."}` → `{"status": "answered" \| "cannot_answer" \| "needs_review", "answer": ..., "citations": [...], ...}` |
+| `/resolve` | POST | `{"thread_id": ..., "action": "approve" \| "edit" \| "reject", "answer": ...}` — resumes a thread paused by `/ask` |
+| `/health` | GET | Liveness check |
+
+A `needs_review` response means the answer couldn't be verified as grounded after retries; it's
+paused (checkpointed, exactly like the CLI's escalation) until a `/resolve` call decides its fate
+— from the same request, a later one, or an entirely different client.
+
+A minimal Streamlit UI sits on top of the API — a chat box in, a cited answer out, with
+approve/edit/reject buttons that appear automatically when a thread pauses for review:
+
+```bash
+# with the API already running (see above)
+streamlit run src/policyguard/ui/app.py
+```
+
 ## Testing
 
 ```bash
 pytest
 ```
 
-74 tests, ~12 seconds, zero live API calls:
+84 tests, ~15 seconds, zero live API calls:
 
 | File | Tests | Covers |
 | --- | --- | --- |
 | `test_chunker.py` | 6 | Hierarchical chunking, parent/child linking, metadata propagation |
-| `test_pdf_ingestion.py` | 11 | Flat window chunking, overlap, sidecar YAML metadata validation |
+| `test_pdf_ingestion.py` | 19 | Flat window chunking, overlap, sidecar YAML metadata validation, guessed-default fallback |
 | `test_chain.py` | 5 | Context-block deduping, prompt construction |
 | `test_citations.py` | 4 | Citation parsing + validation |
 | `test_retrieval.py` | 9 | BM25 exact-match, RRF fusion, Cohere reranker (via fake client) |
 | `test_orchestration.py` | 23 | Every node, every routing decision, full-graph integration incl. interrupt/resume, via a `FakeLLM` |
 | `test_evaluation.py` | 16 | Dataset integrity, both programmatic metrics, both LLM-judge metrics (via fake LLM) |
+| `test_vectorstore.py` | 2 | `delete_document` removes only the targeted doc's chunks, no-ops for an unknown doc id |
 
 The orchestration tests are the ones worth highlighting: they run the **actual compiled
 LangGraph app** — including the interrupt/checkpoint/resume cycle against a real
@@ -317,7 +360,10 @@ LLM, not just reading the architecture doc:
   the same interface, with a `--no-rerank` escape hatch that needs no key at all.
 - **Idempotent ingestion by construction.** Chunk IDs are deterministic hashes of `doc_id` +
   slugified section title, and storage uses `upsert`, not `add` — re-running ingestion on
-  unchanged docs is a safe no-op rather than a source of duplicate vectors. (Known current gap:
-  renaming or deleting a section doesn't prune its old chunk — there's no `delete()` call yet.)
+  unchanged docs is a safe no-op rather than a source of duplicate vectors. Upserting alone never
+  *removes* anything, though — a real duplicate-document incident (the same policy ingested once
+  as Markdown and once as a differently-`doc_id`'d PDF) surfaced that gap directly, which is why
+  `PolicyVectorStore.delete_document(doc_id)` exists: it clears every parent/child chunk under a
+  doc_id before a rename/replace/removal leaves orphaned vectors behind.
 
 
