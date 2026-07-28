@@ -5,27 +5,50 @@ Two collections are used:
   - ``policyguard_parents`` — generation context, looked up by ``parent_id``
     after a child-chunk match.
 
-Uses Chroma's built-in local embedding function (all-MiniLM-L6-v2 via ONNX),
-so no external API key is required at this stage of the pipeline.
+Configured to use HuggingFace's BAAI/bge-small-en-v1.5 embedding model via API
+(when HUGGINGFACE_API_KEY / HF_TOKEN / CHROMA_HUGGINGFACE_API_KEY is provided in .env),
+falling back gracefully to Chroma's default embedding function until the key is set.
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import chromadb
+import chromadb.utils.embedding_functions as ef
 
 from policyguard.ingestion.chunker import Chunk
 
 CHILDREN_COLLECTION = "policyguard_children"
 PARENTS_COLLECTION = "policyguard_parents"
+EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
+
+
+def get_embedding_function():
+    api_key = (
+        os.environ.get("HUGGINGFACE_API_KEY")
+        or os.environ.get("HF_TOKEN")
+        or os.environ.get("CHROMA_HUGGINGFACE_API_KEY")
+    )
+    if api_key:
+        return ef.HuggingFaceEmbeddingFunction(
+            api_key=api_key,
+            model_name=EMBEDDING_MODEL_NAME,
+        )
+    return ef.DefaultEmbeddingFunction()
 
 
 class PolicyVectorStore:
-    def __init__(self, persist_dir: Path):
+    def __init__(self, persist_dir: Path, embedding_function=None):
+        self._embedding_fn = embedding_function or get_embedding_function()
         self._client = chromadb.PersistentClient(path=str(persist_dir))
-        self._children = self._client.get_or_create_collection(CHILDREN_COLLECTION)
-        self._parents = self._client.get_or_create_collection(PARENTS_COLLECTION)
+        self._children = self._client.get_or_create_collection(
+            CHILDREN_COLLECTION, embedding_function=self._embedding_fn
+        )
+        self._parents = self._client.get_or_create_collection(
+            PARENTS_COLLECTION, embedding_function=self._embedding_fn
+        )
 
     def add_chunks(self, parent_chunks: list[Chunk], child_chunks: list[Chunk]) -> None:
         if parent_chunks:

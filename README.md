@@ -21,6 +21,7 @@ handling real policy questions.
   - [Tech stack — why each piece is there](#tech-stack--why-each-piece-is-there)
   - [Project structure](#project-structure)
   - [Getting started](#getting-started)
+  - [Quick Command Reference](#quick-command-reference)
   - [PDF support](#pdf-support)
   - [Managing policy documents](#managing-policy-documents)
   - [Usage](#usage)
@@ -218,6 +219,48 @@ Ingest the sample policy docs into a local Chroma store:
 
 ```bash
 python -m policyguard.ingestion.ingest --input data/policies --persist-dir ./chroma_db
+```
+
+## Quick Command Reference
+
+Here is a quick summary of essential commands for running, managing, and clearing PolicyGuard:
+
+### 1. Clear / Reset Vector DB (Clean Fresh Start)
+To wipe the existing Chroma DB vector store and clear all past chunk embeddings:
+```bash
+python -c "import shutil; shutil.rmtree('./chroma_db', ignore_errors=True); print('Chroma DB vector store cleared!')"
+```
+
+### 2. Ingest Policy Documents
+To ingest Markdown (`.md`) or PDF (`.pdf`) policy files from `data/policies/` into Chroma DB:
+```bash
+python -m policyguard.ingestion.ingest --input data/policies --persist-dir ./chroma_db
+```
+
+### 3. Check Vector DB Chunk Count
+To verify how many parent and child chunks are currently indexed in Chroma DB:
+```bash
+python -c "from pathlib import Path; from policyguard.ingestion.vectorstore import PolicyVectorStore; store = PolicyVectorStore(Path('./chroma_db')); print('Parents:', store._parents.count(), 'Children:', store._children.count())"
+```
+
+### 4. Run Web Application (API + UI)
+- **Step 1: Start FastAPI Service (Backend):**
+  ```bash
+  uvicorn policyguard.api.app:app --reload
+  ```
+- **Step 2: Start Streamlit Interface (Frontend - in a new terminal tab):**
+  ```bash
+  streamlit run src/policyguard/ui/app.py
+  ```
+
+### 5. Run CLI Interactive Mode
+```bash
+python -m policyguard.orchestration.ask
+```
+
+### 6. Run Test Suite
+```bash
+pytest
 ```
 
 ## PDF support
