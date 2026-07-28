@@ -98,7 +98,15 @@ def _invoke_text(llm: BaseChatModel, system: str, user: str) -> str:
 def _format_history(history: list[dict]) -> str:
     if not history:
         return ""
-    turns = "\n\n".join(f"Q: {turn['question']}\nA: {turn['answer']}" for turn in history)
+    valid_turns = [
+        t for t in history
+        if t.get("answer")
+        and "don't have enough information" not in t["answer"]
+        and "PolicyGuard" not in t["answer"]
+    ]
+    if not valid_turns:
+        return ""
+    turns = "\n\n".join(f"Q: {turn['question']}\nA: {turn['answer']}" for turn in valid_turns)
     return f"Conversation so far:\n{turns}\n\n"
 
 
@@ -114,6 +122,17 @@ _POLICY_KEYWORDS = {
 }
 
 
+_OUT_OF_SCOPE_REGEX = re.compile(
+    r"\b(capital\s+of|weather\s+in|recipe|joke|coding|python\s+script|binary\s+search|calculate|math|who\s+won|president\s+of|movie|song)\b",
+    re.IGNORECASE,
+)
+
+_AMBIGUOUS_QUERIES = {
+    "policy", "policies", "what is the policy", "tell me the policy", "show me policy",
+    "tell me about policy", "help", "information", "details"
+}
+
+
 def is_greeting(text: str) -> bool:
     cleaned = text.strip().lower()
     if _GREETING_REGEX.match(cleaned):
@@ -125,10 +144,37 @@ def is_greeting(text: str) -> bool:
     return False
 
 
-def route_after_rewrite(state: GraphState) -> str:
-    if is_greeting(state["question"]) or is_greeting(state.get("rewritten_query", "")):
+def is_out_of_scope(text: str) -> bool:
+    cleaned = text.strip().lower()
+    words = set(re.findall(r"\b\w+\b", cleaned))
+    if _OUT_OF_SCOPE_REGEX.search(cleaned) and not words.intersection(_POLICY_KEYWORDS):
+        return True
+    return False
+
+
+def is_ambiguous(text: str) -> bool:
+    cleaned = text.strip().lower().strip("?.!")
+    if cleaned in _AMBIGUOUS_QUERIES:
+        return True
+    words = set(re.findall(r"\b\w+\b", cleaned))
+    if len(words) <= 2 and words.issubset({"what", "is", "the", "policy", "tell", "me", "about", "show"}):
+        return True
+    return False
+
+
+def classify_intent(text: str) -> str:
+    if is_greeting(text):
         return "handle_greeting"
+    if is_out_of_scope(text):
+        return "handle_out_of_scope"
+    if is_ambiguous(text):
+        return "handle_clarification"
     return "retrieve"
+
+
+def route_after_rewrite(state: GraphState) -> str:
+    query = state.get("rewritten_query") or state["question"]
+    return classify_intent(query)
 
 
 def handle_greeting(state: GraphState, config: RunnableConfig | None = None) -> dict:
@@ -147,11 +193,51 @@ def handle_greeting(state: GraphState, config: RunnableConfig | None = None) -> 
     }
 
 
+def handle_out_of_scope(state: GraphState, config: RunnableConfig | None = None) -> dict:
+    answer_text = (
+        "I am PolicyGuard, an AI assistant specialized in company HR and IT policies. "
+        "I cannot assist with general knowledge, trivia, or off-topic queries. "
+        "Please ask a question related to company policies (e.g. Annual Leave, WFH, IT Security, or Expenses)."
+    )
+    token_queue = (config or {}).get("configurable", {}).get("token_queue")
+    if token_queue is not None:
+        token_queue.put(answer_text)
+    return {
+        "answer": answer_text,
+        "citations": [],
+        "invalid_citations": [],
+        "grounded": True,
+    }
+
+
+def handle_clarification(state: GraphState, config: RunnableConfig | None = None) -> dict:
+    answer_text = (
+        "Your question is very broad. Could you please specify which policy area you are interested in?\n\n"
+        "For example:\n"
+        "- **Annual Leave & Carryover Rules**\n"
+        "- **Work From Home (WFH) & Remote Work**\n"
+        "- **IT Security & Asset Management**\n"
+        "- **Expense Reimbursement & Travel**"
+    )
+    token_queue = (config or {}).get("configurable", {}).get("token_queue")
+    if token_queue is not None:
+        token_queue.put(answer_text)
+    return {
+        "answer": answer_text,
+        "citations": [],
+        "invalid_citations": [],
+        "grounded": True,
+    }
+
+
 def rewrite_query(state: GraphState, llm: BaseChatModel) -> dict:
+    raw_q = state["question"]
+    if is_greeting(raw_q) or is_out_of_scope(raw_q) or is_ambiguous(raw_q):
+        return {"rewritten_query": raw_q}
     history_block = _format_history(state.get("history", []))
-    user_prompt = f"{history_block}Latest question: {state['question']}"
+    user_prompt = f"{history_block}Latest question: {raw_q}"
     rewritten = _invoke_text(llm, REWRITE_PROMPT, user_prompt).strip().strip('"')
-    return {"rewritten_query": rewritten or state["question"]}
+    return {"rewritten_query": rewritten or raw_q}
 
 
 def retrieve(

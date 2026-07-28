@@ -82,3 +82,37 @@ def test_no_subsections_produces_single_fallback_child():
     )]
     assert len(section_two_children) == 1
     assert "Only intro text" in section_two_children[0].text
+
+
+def test_table_preservation_in_chunking():
+    table_text = (
+        "Here is the leave table:\n\n"
+        "| Leave Type | Days |\n"
+        "| --- | --- |\n"
+        "| Annual | 21 |\n"
+        "| Sick | 10 |\n\n"
+        "End of leave table info."
+    )
+    from policyguard.ingestion.chunker import _split_into_windows
+    windows = _split_into_windows(table_text, chunk_size=500, overlap=50)
+    assert len(windows) >= 1
+    assert "| Annual | 21 |" in windows[0]
+    assert "| Sick | 10 |" in windows[0]
+
+
+def test_chunk_pdf_document_hierarchical():
+    from policyguard.ingestion.chunker import chunk_pdf_document
+    doc = PolicyDocument(
+        doc_id="pdf-doc",
+        department="IT",
+        effective_date="2026-01-01",
+        version="1.0",
+        body="Paragraph one of IT policy. " * 30 + "\n\n" + "Paragraph two of IT policy. " * 30,
+        source_path=Path("sample.pdf"),
+    )
+    parent_chunks, child_chunks = chunk_pdf_document(doc)
+    assert len(parent_chunks) >= 1
+    assert len(child_chunks) >= 1
+    for child in child_chunks:
+        assert child.parent_id is not None
+        assert child.metadata.get("parent_id") == child.parent_id

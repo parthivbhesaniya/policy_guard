@@ -21,6 +21,10 @@ st.title("PolicyGuard")
 st.caption("Ask a question about company HR/IT policy. Answers are grounded in retrieved policy excerpts with citations.")
 
 api_url = st.sidebar.text_input("API URL", value=DEFAULT_API_URL)
+if st.sidebar.button("Clear Conversation"):
+    st.session_state.history = []
+    st.session_state.pending = None
+    st.rerun()
 
 if "history" not in st.session_state:
     st.session_state.history = []  # list of {"question": str, "response": dict}

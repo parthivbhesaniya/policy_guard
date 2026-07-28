@@ -94,6 +94,8 @@ def chunk_document(doc: PolicyDocument) -> tuple[list[Chunk], list[Chunk]]:
 
 
 DEFAULT_PDF_CHUNK_SIZE = 1000
+DEFAULT_PDF_PARENT_CHUNK_SIZE = 2000
+DEFAULT_PDF_CHILD_CHUNK_SIZE = 600
 DEFAULT_PDF_CHUNK_OVERLAP = 150
 
 _PARAGRAPH_SPLIT_RE = re.compile(r"\n\s*\n")
@@ -106,10 +108,8 @@ def chunk_pdf_document(
 ) -> tuple[list[Chunk], list[Chunk]]:
     """Returns (parent_chunks, child_chunks) for a PDF-sourced PolicyDocument.
 
-    No heading structure to chunk by, so this uses flat fixed-size windows instead of the
-    hierarchical parent/child split ``chunk_document`` does for Markdown. Each window is both
-    its own parent (generation context) and its own child (retrieval target) -- there's no
-    separate, larger context to promote it to.
+    Generates parent context windows (~2000 chars) for full section context and
+    child retrieval windows (~600 chars) linked via `parent_id` for retrieval precision.
     """
     base_metadata = {
         "doc_id": doc.doc_id,
@@ -118,43 +118,96 @@ def chunk_pdf_document(
         "version": doc.version,
     }
 
-    windows = _split_into_windows(doc.body, chunk_size=chunk_size, overlap=overlap)
+    parent_size = max(chunk_size, DEFAULT_PDF_PARENT_CHUNK_SIZE)
+    child_size = min(chunk_size, DEFAULT_PDF_CHILD_CHUNK_SIZE)
+
+    parent_windows = _split_into_windows(doc.body, chunk_size=parent_size, overlap=overlap)
 
     parent_chunks: list[Chunk] = []
     child_chunks: list[Chunk] = []
 
-    for i, window_text in enumerate(windows):
+    for i, parent_text in enumerate(parent_windows):
         section = f"Part {i + 1}"
-        chunk_id = f"{doc.doc_id}::part-{i + 1}"
-        metadata = {**base_metadata, "section": section}
+        parent_id = f"{doc.doc_id}::part-{i + 1}"
+        parent_metadata = {**base_metadata, "section": section}
 
         parent_chunks.append(
-            Chunk(id=chunk_id, doc_id=doc.doc_id, level="parent", section=section, text=window_text, metadata=metadata)
+            Chunk(id=parent_id, doc_id=doc.doc_id, level="parent", section=section, text=parent_text, metadata=parent_metadata)
         )
-        child_chunks.append(
-            Chunk(
-                id=chunk_id,
-                doc_id=doc.doc_id,
-                level="child",
-                section=section,
-                text=window_text,
-                metadata={**metadata, "parent_id": chunk_id},
-                parent_id=chunk_id,
+
+        child_windows = _split_into_windows(parent_text, chunk_size=child_size, overlap=overlap // 2)
+        if len(child_windows) <= 1:
+            child_chunks.append(
+                Chunk(
+                    id=parent_id,
+                    doc_id=doc.doc_id,
+                    level="child",
+                    section=section,
+                    text=parent_text,
+                    metadata={**parent_metadata, "parent_id": parent_id},
+                    parent_id=parent_id,
+                )
             )
-        )
+        else:
+            for j, child_text in enumerate(child_windows):
+                child_id = f"{parent_id}::sub-{j + 1}"
+                child_chunks.append(
+                    Chunk(
+                        id=child_id,
+                        doc_id=doc.doc_id,
+                        level="child",
+                        section=section,
+                        text=child_text,
+                        metadata={**parent_metadata, "parent_id": parent_id},
+                        parent_id=parent_id,
+                    )
+                )
 
     return parent_chunks, child_chunks
 
 
-def _split_into_windows(text: str, chunk_size: int, overlap: int) -> list[str]:
-    """Paragraph-aware fixed-size chunking with a trailing-character overlap between windows.
+def _extract_blocks_preserving_tables(text: str) -> list[str]:
+    """Splits text into paragraph blocks while keeping Markdown tables (| ... |) intact."""
+    lines = text.splitlines()
+    blocks: list[str] = []
+    current_block: list[str] = []
+    in_table = False
 
-    Paragraphs (blank-line-separated blocks) are packed greedily into windows up to
-    `chunk_size` characters; a single paragraph longer than `chunk_size` is hard-split. Each
-    window after the first is prefixed with the tail of the previous window, so context isn't
-    lost right at a chunk boundary.
-    """
-    paragraphs = [p.strip() for p in _PARAGRAPH_SPLIT_RE.split(text) if p.strip()]
+    for line in lines:
+        stripped = line.strip()
+        is_table_line = stripped.startswith("|") and stripped.endswith("|")
+        if is_table_line:
+            if not in_table:
+                if current_block:
+                    blocks.append("\n".join(current_block).strip())
+                    current_block = []
+                in_table = True
+            current_block.append(line)
+        else:
+            if in_table:
+                if current_block:
+                    blocks.append("\n".join(current_block).strip())
+                    current_block = []
+                in_table = False
+            current_block.append(line)
+
+    if current_block:
+        blocks.append("\n".join(current_block).strip())
+
+    final_blocks: list[str] = []
+    for b in blocks:
+        if b.startswith("|") and b.endswith("|"):
+            final_blocks.append(b)
+        else:
+            for p in _PARAGRAPH_SPLIT_RE.split(b):
+                if p.strip():
+                    final_blocks.append(p.strip())
+    return final_blocks
+
+
+def _split_into_windows(text: str, chunk_size: int, overlap: int) -> list[str]:
+    """Paragraph-aware fixed-size chunking with table preservation and window overlap."""
+    paragraphs = _extract_blocks_preserving_tables(text)
     if not paragraphs:
         return []
 

@@ -148,7 +148,7 @@ def ask_stream(request: AskRequest) -> StreamingResponse:
                 node = item["node"]
                 if node == "rewrite_query":
                     yield f"data: {json.dumps({'type': 'status', 'content': 'Searching policy documents...'})}\n\n"
-                elif node == "handle_greeting":
+                elif node in ("handle_greeting", "handle_out_of_scope", "handle_clarification"):
                     yield f"data: {json.dumps({'type': 'status', 'content': 'Responding...'})}\n\n"
                 elif node == "retrieve":
                     yield f"data: {json.dumps({'type': 'status', 'content': 'Evaluating excerpt relevance...'})}\n\n"

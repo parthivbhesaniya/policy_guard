@@ -45,6 +45,8 @@ def build_graph(
     graph = StateGraph(GraphState)
     graph.add_node("rewrite_query", partial(nodes.rewrite_query, llm=llm))
     graph.add_node("handle_greeting", nodes.handle_greeting)
+    graph.add_node("handle_out_of_scope", nodes.handle_out_of_scope)
+    graph.add_node("handle_clarification", nodes.handle_clarification)
     graph.add_node("retrieve", partial(nodes.retrieve, retriever=retriever, reranker=reranker, k=k, fetch_k=fetch_k))
     graph.add_node("grade_documents", partial(nodes.grade_documents, llm=llm))
     graph.add_node("generate", partial(nodes.generate, llm=llm))
@@ -56,9 +58,16 @@ def build_graph(
     graph.add_conditional_edges(
         "rewrite_query",
         nodes.route_after_rewrite,
-        {"handle_greeting": "handle_greeting", "retrieve": "retrieve"},
+        {
+            "handle_greeting": "handle_greeting",
+            "handle_out_of_scope": "handle_out_of_scope",
+            "handle_clarification": "handle_clarification",
+            "retrieve": "retrieve",
+        },
     )
     graph.add_edge("handle_greeting", END)
+    graph.add_edge("handle_out_of_scope", END)
+    graph.add_edge("handle_clarification", END)
     graph.add_edge("retrieve", "grade_documents")
     graph.add_conditional_edges(
         "grade_documents",

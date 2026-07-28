@@ -33,13 +33,17 @@ def _sample_doc() -> PolicyDocument:
 
 
 class FakeLLM:
-    """Returns canned responses in order, ignoring the actual prompt content."""
+    """Returns canned responses in order. Records the messages it was called with, so tests can
+    assert on prompt content (e.g. that conversation history reached the prompt) without caring
+    about it for tests that don't."""
 
     def __init__(self, responses: list[str]):
         self._responses = list(responses)
         self.call_count = 0
+        self.received_messages: list = []
 
     def invoke(self, messages):
+        self.received_messages.append(messages)
         response = self._responses[self.call_count]
         self.call_count += 1
 
@@ -48,6 +52,58 @@ class FakeLLM:
                 self.content = content
 
         return _Response(response)
+
+
+# --- conversation history -----------------------------------------------------------------
+
+
+def test_format_history_empty_returns_empty_string():
+    assert nodes._format_history([]) == ""
+
+
+def test_format_history_formats_qa_pairs_oldest_first():
+    history = [
+        {"question": "what is the leave policy", "answer": "Employees get 18 earned leaves."},
+        {"question": "how many public holidays", "answer": "There are 10 public holidays."},
+    ]
+    formatted = nodes._format_history(history)
+
+    assert formatted.startswith("Conversation so far:")
+    assert formatted.index("what is the leave policy") < formatted.index("how many public holidays")
+    assert "Employees get 18 earned leaves." in formatted
+
+
+def test_initial_state_defaults_history_to_empty_list():
+    assert initial_state("a question")["history"] == []
+
+
+def test_initial_state_accepts_history():
+    history = [{"question": "q1", "answer": "a1"}]
+    assert initial_state("a question", history=history)["history"] == history
+
+
+def test_rewrite_query_without_history_omits_conversation_block():
+    llm = FakeLLM(["rewritten"])
+    state = initial_state("what is the leave policy")
+
+    nodes.rewrite_query(state, llm=llm)
+
+    user_message = llm.received_messages[0][1]
+    assert "Conversation so far" not in user_message.content
+    assert "Latest question: what is the leave policy" in user_message.content
+
+
+def test_rewrite_query_includes_history_in_prompt():
+    llm = FakeLLM(["rewritten"])
+    history = [{"question": "what is the leave policy", "answer": "Employees get 18 earned leaves."}]
+    state = initial_state("does this apply to interns", history=history)
+
+    nodes.rewrite_query(state, llm=llm)
+
+    user_message = llm.received_messages[0][1]
+    assert "Conversation so far" in user_message.content
+    assert "what is the leave policy" in user_message.content
+    assert "Latest question: does this apply to interns" in user_message.content
 
 
 # --- pure parsing/routing helpers ---------------------------------------------------------
@@ -142,6 +198,25 @@ def _build_test_store(tmp_path: Path) -> PolicyVectorStore:
     return store
 
 
+def test_graph_passes_history_into_rewrite_query_prompt(tmp_path):
+    store = _build_test_store(tmp_path)
+    llm = FakeLLM(
+        [
+            "does the annual leave policy apply to interns",  # rewrite_query
+            "[]",  # grade_documents: nothing relevant, keeps the test short
+        ]
+    )
+    app = build_graph(store, llm=llm)
+    history = [{"question": "how much annual leave do I get", "answer": "21 days a year."}]
+
+    app.invoke(initial_state("does this apply to interns", history=history))
+
+    rewrite_call_messages = llm.received_messages[0]
+    user_message = rewrite_call_messages[1]
+    assert "how much annual leave do I get" in user_message.content
+    assert "Latest question: does this apply to interns" in user_message.content
+
+
 def test_graph_happy_path_ends_grounded(tmp_path):
     store = _build_test_store(tmp_path)
     llm = FakeLLM(
@@ -173,7 +248,7 @@ def test_graph_no_relevant_documents_routes_to_cannot_answer(tmp_path):
     )
     app = build_graph(store, llm=llm)
 
-    result = app.invoke(initial_state("what is the capital of France"))
+    result = app.invoke(initial_state("what is the policy for quantum computing"))
 
     assert "don't have enough information" in result["answer"]
     assert result["graded_documents"] == []
@@ -296,3 +371,44 @@ def test_resume_reject_returns_cannot_answer_message(tmp_path):
 
     assert "don't have enough information" in result["answer"]
     assert result["human_reviewed"] is True
+
+
+def test_is_greeting():
+    assert nodes.is_greeting("hi") is True
+    assert nodes.is_greeting("Hello!") is True
+    assert nodes.is_greeting("good morning") is True
+    assert nodes.is_greeting("thanks") is True
+    assert nodes.is_greeting("what is the WFH policy?") is False
+
+
+def test_graph_handles_greeting_without_retrieval(tmp_path):
+    store = _build_test_store(tmp_path)
+    llm = FakeLLM(["hi"])
+    app = build_graph(store, llm=llm)
+    result = app.invoke(initial_state("hi"))
+
+    assert "PolicyGuard" in result["answer"]
+    assert result["grounded"] is True
+    assert result["citations"] == []
+
+
+def test_out_of_scope_routing(tmp_path):
+    store = _build_test_store(tmp_path)
+    llm = FakeLLM(["what is the capital of France"])
+    app = build_graph(store, llm=llm)
+    result = app.invoke(initial_state("what is the capital of France"))
+
+    assert "specialized in company HR and IT policies" in result["answer"]
+    assert result["grounded"] is True
+    assert result["citations"] == []
+
+
+def test_ambiguity_clarification_routing(tmp_path):
+    store = _build_test_store(tmp_path)
+    llm = FakeLLM(["tell me the policy"])
+    app = build_graph(store, llm=llm)
+    result = app.invoke(initial_state("tell me the policy"))
+
+    assert "question is very broad" in result["answer"]
+    assert result["grounded"] is True
+    assert result["citations"] == []
