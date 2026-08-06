@@ -20,9 +20,51 @@ import chromadb.utils.embedding_functions as ef
 
 from policyguard.ingestion.chunker import Chunk
 
+from chromadb.api.types import EmbeddingFunction
+
 CHILDREN_COLLECTION = "policyguard_children"
 PARENTS_COLLECTION = "policyguard_parents"
 EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"
+
+
+class FallbackEmbeddingFunction(EmbeddingFunction):
+    """Wraps a primary embedding function (e.g. HuggingFace) and falls back to Chroma's
+    DefaultEmbeddingFunction if the primary function encounters network or API errors."""
+
+    def __init__(self, primary_ef: EmbeddingFunction, fallback_ef: EmbeddingFunction | None = None):
+        self._primary_ef = primary_ef
+        self._fallback_ef = fallback_ef or ef.DefaultEmbeddingFunction()
+        self._active_ef = self._primary_ef
+
+    def name(self) -> str:
+        if hasattr(self._active_ef, "name"):
+            return self._active_ef.name()
+        return "default"
+
+    def __call__(self, input: list[str]) -> list[list[float]]:
+        try:
+            return self._active_ef(input)
+        except Exception:
+            if self._active_ef is not self._fallback_ef:
+                self._active_ef = self._fallback_ef
+                return self._fallback_ef(input)
+            raise
+
+    def embed_query(self, input: list[str]) -> list[list[float]]:
+        try:
+            if hasattr(self._active_ef, "embed_query"):
+                return self._active_ef.embed_query(input)
+            return self._active_ef(input)
+        except Exception:
+            if self._active_ef is not self._fallback_ef:
+                self._active_ef = self._fallback_ef
+                if hasattr(self._fallback_ef, "embed_query"):
+                    return self._fallback_ef.embed_query(input)
+                return self._fallback_ef(input)
+    def get_config(self) -> dict:
+        if hasattr(self._active_ef, "get_config"):
+            return self._active_ef.get_config()
+        return {}
 
 
 def get_embedding_function():
@@ -32,10 +74,11 @@ def get_embedding_function():
         or os.environ.get("CHROMA_HUGGINGFACE_API_KEY")
     )
     if api_key:
-        return ef.HuggingFaceEmbeddingFunction(
+        hf_ef = ef.HuggingFaceEmbeddingFunction(
             api_key=api_key,
             model_name=EMBEDDING_MODEL_NAME,
         )
+        return FallbackEmbeddingFunction(hf_ef)
     return ef.DefaultEmbeddingFunction()
 
 
@@ -43,12 +86,18 @@ class PolicyVectorStore:
     def __init__(self, persist_dir: Path, embedding_function=None):
         self._embedding_fn = embedding_function or get_embedding_function()
         self._client = chromadb.PersistentClient(path=str(persist_dir))
-        self._children = self._client.get_or_create_collection(
-            CHILDREN_COLLECTION, embedding_function=self._embedding_fn
-        )
-        self._parents = self._client.get_or_create_collection(
-            PARENTS_COLLECTION, embedding_function=self._embedding_fn
-        )
+        self._children = self._get_or_create_collection(CHILDREN_COLLECTION)
+        self._parents = self._get_or_create_collection(PARENTS_COLLECTION)
+
+    def _get_or_create_collection(self, name: str):
+        try:
+            return self._client.get_or_create_collection(
+                name, embedding_function=self._embedding_fn
+            )
+        except ValueError as exc:
+            if "Embedding function conflict" in str(exc) or "already exists" in str(exc):
+                return self._client.get_collection(name)
+            raise
 
     def add_chunks(self, parent_chunks: list[Chunk], child_chunks: list[Chunk]) -> None:
         if parent_chunks:
