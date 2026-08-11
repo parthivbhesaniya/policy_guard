@@ -7,10 +7,11 @@ Run the API first (see README), then:
 from __future__ import annotations
 
 import json
+import os
 import requests
 import streamlit as st
 
-DEFAULT_API_URL = "http://localhost:8000"
+DEFAULT_API_URL = os.environ.get("POLICYGUARD_API_URL", "http://localhost:8000")
 
 # How many prior Q&A turns to send back to the API for reference-resolution (e.g. "does this
 # apply to interns"), bounding how much the rewrite-query prompt grows over a long session.

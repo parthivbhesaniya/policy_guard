@@ -41,7 +41,7 @@ def _unanswerable_example() -> GoldenExample:
 
 def test_golden_dataset_loads_and_has_reasonable_size():
     examples = load_golden_dataset(DEFAULT_DATASET_PATH)
-    assert 20 <= len(examples) <= 30
+    assert 20 <= len(examples) <= 60
 
 
 def test_golden_dataset_ids_are_unique():
@@ -50,19 +50,13 @@ def test_golden_dataset_ids_are_unique():
     assert len(ids) == len(set(ids))
 
 
-def test_golden_dataset_covers_every_parent_section_at_least_twice():
+def test_golden_dataset_covers_the_ingested_corpus_broadly():
     examples = load_golden_dataset(DEFAULT_DATASET_PATH)
-    sections = [e.expected_section for e in examples if e.answerable]
-    counts = {s: sections.count(s) for s in set(sections)}
-    assert all(count >= 2 for count in counts.values())
-    assert set(counts) == {
-        "Annual Leave",
-        "Sick Leave",
-        "Parental Leave",
-        "Password Requirements",
-        "Device Security",
-        "Access Requests",
-    }
+    answerable = [e for e in examples if e.answerable]
+    doc_ids = {e.expected_doc_id for e in answerable}
+    sections = {e.expected_section for e in answerable}
+    assert doc_ids == {"hr-policy-dec-2025"}
+    assert len(sections) >= 10
 
 
 def test_golden_dataset_includes_unanswerable_negatives():

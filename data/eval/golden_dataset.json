@@ -1,150 +1,174 @@
 [
   {
-    "id": "hr-annual-01",
-    "question": "How many days of annual leave do full-time employees accrue per year?",
+    "id": "office-hours-01",
+    "question": "What are NHSRC's standard office working hours?",
     "answerable": true,
-    "expected_doc_id": "hr-leave-policy",
-    "expected_section": "Annual Leave",
-    "expected_answer": "Full-time employees accrue 1.75 days per month, for a total of 21 days per calendar year."
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 4",
+    "expected_answer": "09:00 AM to 05:30 PM, Monday to Friday, with a 30-minute lunch break from 01:00 PM to 01:30 PM."
   },
   {
-    "id": "hr-annual-02",
-    "question": "How many unused annual leave days can I carry over into next year?",
+    "id": "office-wfh-01",
+    "question": "How many days per month can staff work from home without needing Executive Director approval?",
     "answerable": true,
-    "expected_doc_id": "hr-leave-policy",
-    "expected_section": "Annual Leave",
-    "expected_answer": "You may carry over a maximum of 5 unused annual leave days into the next calendar year."
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 4",
+    "expected_answer": "Up to 3 working days per month; beyond that requires approval from the Executive Director."
   },
   {
-    "id": "hr-annual-03",
-    "question": "How much advance notice do I need to give before requesting annual leave?",
+    "id": "office-dress-01",
+    "question": "Is casual clothing permitted in the NHSRC office?",
     "answerable": true,
-    "expected_doc_id": "hr-leave-policy",
-    "expected_section": "Annual Leave",
-    "expected_answer": "Leave must be requested at least 5 business days in advance through the HR portal."
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 5",
+    "expected_answer": "No. Casual clothing is not permitted in the office; neat and clean formal/semi-formal clothes are expected."
   },
   {
-    "id": "hr-annual-04",
-    "question": "If I have more than 5 unused leave days at the end of the year, what happens to the extra days?",
+    "id": "probation-length-01",
+    "question": "How long is the standard probation period for a new consultant?",
     "answerable": true,
-    "expected_doc_id": "hr-leave-policy",
-    "expected_section": "Annual Leave",
-    "expected_answer": "Any unused days beyond the 5-day cap are forfeited on December 31st unless the employee has an approved carryover exception on file with HR."
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 14",
+    "expected_answer": "Three (3) months, which may be extended up to six (6) months."
   },
   {
-    "id": "hr-sick-01",
-    "question": "How many paid sick days do employees get per calendar year?",
+    "id": "probation-notice-01",
+    "question": "What notice is required to end a contract during the probation period?",
     "answerable": true,
-    "expected_doc_id": "hr-leave-policy",
-    "expected_section": "Sick Leave",
-    "expected_answer": "Employees receive 10 paid sick days per calendar year."
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 14",
+    "expected_answer": "A 15-day notice by either party, or payment in lieu thereof."
   },
   {
-    "id": "hr-sick-02",
-    "question": "Do I need to provide a doctor's note if I'm out sick?",
+    "id": "contract-length-01",
+    "question": "How long is the initial contract term offered to a consultant?",
     "answerable": true,
-    "expected_doc_id": "hr-leave-policy",
-    "expected_section": "Sick Leave",
-    "expected_answer": "Only for absences exceeding 3 consecutive business days -- you must submit a doctor's note to HR within 5 business days of returning to work."
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 13",
+    "expected_answer": "NHSRC initially offers a two-year contract, extendable subject to performance, funding, or divisional need."
   },
   {
-    "id": "hr-sick-03",
-    "question": "Does unused sick leave carry over into the next calendar year?",
+    "id": "contract-termination-notice-01",
+    "question": "What's the notice period for terminating a consultant's contract outside of probation?",
     "answerable": true,
-    "expected_doc_id": "hr-leave-policy",
-    "expected_section": "Sick Leave",
-    "expected_answer": "No, sick leave does not carry over between calendar years."
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 13",
+    "expected_answer": "The contract can be terminated by NHSRC or the consultant within 30 days of the notice period, or payment in lieu thereof."
   },
   {
-    "id": "hr-parental-01",
-    "question": "How many weeks of paid parental leave do eligible employees receive?",
+    "id": "joining-notice-01",
+    "question": "What notice period is NHSRC willing to accept from a candidate's current employer before they join?",
     "answerable": true,
-    "expected_doc_id": "hr-leave-policy",
-    "expected_section": "Parental Leave",
-    "expected_answer": "Eligible employees receive 12 weeks of paid parental leave following the birth or adoption of a child."
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 12",
+    "expected_answer": "A 30-day notice period is acceptable; a longer one requires mutual agreement and ED approval."
   },
   {
-    "id": "hr-parental-02",
-    "question": "How long do I need to have worked here to qualify for paid parental leave?",
+    "id": "short-term-leave-01",
+    "question": "How much leave is a short-term consultant entitled to over a 3-month contract?",
     "answerable": true,
-    "expected_doc_id": "hr-leave-policy",
-    "expected_section": "Parental Leave",
-    "expected_answer": "You must have completed at least 6 months of continuous employment to be eligible for paid parental leave."
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 18",
+    "expected_answer": "1 leave per month, amounting to 3 leaves over a 3-month contract; all 3 can be taken at once or one at a time."
   },
   {
-    "id": "hr-parental-03",
-    "question": "I've only worked here for 3 months -- what parental leave am I entitled to?",
+    "id": "short-term-notice-01",
+    "question": "What is the notice period for short-term consultants?",
     "answerable": true,
-    "expected_doc_id": "hr-leave-policy",
-    "expected_section": "Parental Leave",
-    "expected_answer": "Employees below the 6-month tenure threshold are eligible for unpaid leave under applicable local law, not paid parental leave."
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 19",
+    "expected_answer": "7 days."
   },
   {
-    "id": "it-password-01",
+    "id": "intern-fellow-pay-01",
+    "question": "What is the monthly remuneration for Interns compared to Fellows?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 19",
+    "expected_answer": "Interns are paid Rs. 45,000 per month, and Fellows are paid Rs. 50,000 per month."
+  },
+  {
+    "id": "intern-fellow-notice-01",
+    "question": "What is the notice period difference between Interns and Fellows?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 19",
+    "expected_answer": "The notice period for Interns is 7 days, while for Fellows it is 15 days."
+  },
+  {
+    "id": "earned-leave-01",
+    "question": "How is Earned Leave accrued for assistant-level staff?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 33",
+    "expected_answer": "30 days per year, earned on a monthly basis at 2.5 days per month."
+  },
+  {
+    "id": "casual-leave-01",
+    "question": "How many days of Casual Leave are assistant-level staff entitled to per year, and what's the limit per instance?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 33",
+    "expected_answer": "8 days of Casual Leave per year; it cannot be availed for more than 2 days at a time (up to 4 days if a weekend/holiday is added at both ends)."
+  },
+  {
+    "id": "sick-leave-cert-01",
+    "question": "When is a medical certificate required for sick leave?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 34",
+    "expected_answer": "Sick leave in excess of 3 days must be supported by a certificate from a registered medical practitioner."
+  },
+  {
+    "id": "maternity-leave-01",
+    "question": "How long is maternity leave for eligible consultants?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 33",
+    "expected_answer": "Up to 26 weeks, or until completion of their contract, whichever is earlier, subject to having worked 80 days in the last 12 months prior to proceeding on maternity leave."
+  },
+  {
+    "id": "leave-carryforward-01",
+    "question": "What is the maximum number of leave days that can be carried forward into the next year?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 38",
+    "expected_answer": "Carry forward of leave is permitted up to a limit of 10 days in a year, subject to a ceiling of 30 days over the complete tenure."
+  },
+  {
+    "id": "grievance-committee-01",
+    "question": "Who sits on NHSRC's Grievance Resolution Committee?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 46",
+    "expected_answer": "The PAO, NHSRC (Chairperson), two Lead Consultants (Members), and the HRM (Convenor); at least one member must be a woman."
+  },
+  {
+    "id": "neg-password-01",
     "question": "What is the minimum password length required for company accounts?",
-    "answerable": true,
-    "expected_doc_id": "it-security-policy",
-    "expected_section": "Password Requirements",
-    "expected_answer": "Passwords must be at least 14 characters long and include a mix of uppercase, lowercase, numeric, and special characters."
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
   },
   {
-    "id": "it-password-02",
+    "id": "neg-password-02",
     "question": "How often do I need to rotate my password on a high-sensitivity system?",
-    "answerable": true,
-    "expected_doc_id": "it-security-policy",
-    "expected_section": "Password Requirements",
-    "expected_answer": "Passwords for high-sensitivity systems must be rotated every 90 days."
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
   },
   {
-    "id": "it-password-03",
-    "question": "What's the password rotation requirement for standard-sensitivity systems?",
-    "answerable": true,
-    "expected_doc_id": "it-security-policy",
-    "expected_section": "Password Requirements",
-    "expected_answer": "Standard-sensitivity systems require password rotation every 180 days."
-  },
-  {
-    "id": "it-password-04",
-    "question": "Can I reuse a password I used a few rotations ago?",
-    "answerable": true,
-    "expected_doc_id": "it-security-policy",
-    "expected_section": "Password Requirements",
-    "expected_answer": "No, reused passwords from the last 10 rotations are not permitted."
-  },
-  {
-    "id": "it-device-01",
+    "id": "neg-device-01",
     "question": "What security features must be enabled on my company-issued laptop?",
-    "answerable": true,
-    "expected_doc_id": "it-security-policy",
-    "expected_section": "Device Security",
-    "expected_answer": "Disk encryption, a screen lock, and endpoint monitoring software must be enabled at all times."
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
   },
   {
-    "id": "it-device-02",
-    "question": "How quickly must I report a lost or stolen company device?",
-    "answerable": true,
-    "expected_doc_id": "it-security-policy",
-    "expected_section": "Device Security",
-    "expected_answer": "Within 1 hour of discovery, so it can be remotely wiped and access revoked."
-  },
-  {
-    "id": "it-access-01",
-    "question": "Who needs to approve a request for access beyond my default role?",
-    "answerable": true,
-    "expected_doc_id": "it-security-policy",
-    "expected_section": "Access Requests",
-    "expected_answer": "Both the requesting employee's manager and the owner of the target system must approve."
-  },
-  {
-    "id": "it-access-02",
-    "question": "Where do I submit a request for additional system access?",
-    "answerable": true,
-    "expected_doc_id": "it-security-policy",
-    "expected_section": "Access Requests",
-    "expected_answer": "Access requests are submitted through the IT service desk."
-  },
-  {
-    "id": "neg-01",
+    "id": "neg-wifi-01",
     "question": "What is the office WiFi password?",
     "answerable": false,
     "expected_doc_id": null,
@@ -152,31 +176,7 @@
     "expected_answer": "I don't have enough information in the current policy documents to answer that."
   },
   {
-    "id": "neg-02",
-    "question": "How many vacation days do contractors get?",
-    "answerable": false,
-    "expected_doc_id": null,
-    "expected_section": null,
-    "expected_answer": "I don't have enough information in the current policy documents to answer that."
-  },
-  {
-    "id": "neg-03",
-    "question": "Can I expense a client dinner?",
-    "answerable": false,
-    "expected_doc_id": null,
-    "expected_section": null,
-    "expected_answer": "I don't have enough information in the current policy documents to answer that."
-  },
-  {
-    "id": "neg-04",
-    "question": "What is the capital of France?",
-    "answerable": false,
-    "expected_doc_id": null,
-    "expected_section": null,
-    "expected_answer": "I don't have enough information in the current policy documents to answer that."
-  },
-  {
-    "id": "neg-05",
+    "id": "neg-401k-01",
     "question": "Does the company offer a 401k match?",
     "answerable": false,
     "expected_doc_id": null,
@@ -184,8 +184,208 @@
     "expected_answer": "I don't have enough information in the current policy documents to answer that."
   },
   {
-    "id": "neg-06",
-    "question": "What's the process for requesting a raise?",
+    "id": "neg-general-01",
+    "question": "What is the capital of France?",
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
+  },
+  {
+    "id": "reporting-chain-01",
+    "question": "Who forms Tier 1 in NHSRC's reporting chain?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 6",
+    "expected_answer": "The Executive Director (ED), Advisors, Director RRC-NE, and PAO; all Advisors, Director RRC-NE, PAO, and Division Heads report directly to the ED."
+  },
+  {
+    "id": "echelons-01",
+    "question": "Who leads a division at NHSRC when an Advisor is absent?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 8",
+    "expected_answer": "A Lead Consultant can lead or head the division; in administration, Senior Consultants are expected to lead their respective sections."
+  },
+  {
+    "id": "tor-approval-01",
+    "question": "Who gives final approval for a position's Terms of Reference?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 9",
+    "expected_answer": "The ED, NHSRC, through the PAO. The ToR for the Advisor and Principal Administrative Officer is approved by the ED in consultation with MoH&FW."
+  },
+  {
+    "id": "advertisement-duration-01",
+    "question": "How long does a recruitment advertisement stay live before applications close?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 10",
+    "expected_answer": "A maximum of 21 days. Advertisements are released twice a month, normally on the 5th and 20th."
+  },
+  {
+    "id": "joining-extension-01",
+    "question": "By how many days can a candidate's joining date be extended at most?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 12",
+    "expected_answer": "The joining date cannot be extended by more than 10 days under any circumstances."
+  },
+  {
+    "id": "accidental-insurance-01",
+    "question": "Does NHSRC's free accidental insurance benefit cover Summer Interns?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 15",
+    "expected_answer": "No. The free accidental insurance policy does not cover Summer Interns, Short Term Consultants, or Consultants on work orders."
+  },
+  {
+    "id": "medical-insurance-01",
+    "question": "What percentage of the Mediclaim insurance premium does NHSRC pay?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 15",
+    "expected_answer": "80% of the premium; the remaining 20% is paid by the individual, for a cashless Mediclaim cover of Rs. 5 lakhs."
+  },
+  {
+    "id": "restricted-holiday-01",
+    "question": "How many Restricted Holidays can an employee avail per year?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 17",
+    "expected_answer": "Any two Restricted Holidays as specified by DoPT in the list of Restricted Holidays."
+  },
+  {
+    "id": "short-term-contract-extension-01",
+    "question": "What is the maximum duration a short-term consultant's contract can be extended to, in rare circumstances?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 17",
+    "expected_answer": "11 months. Normally engaged for 3 months, extendable by another 3 months, with a maximum of 11 months in very specific and rare circumstances."
+  },
+  {
+    "id": "external-consultant-empanelment-01",
+    "question": "How is an External Consultant empanelled with NHSRC?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 22",
+    "expected_answer": "Empanelment is done on a monthly basis by the ED's Secretariat, which maintains the list of empanelled experts and shares it with the Admin Division."
+  },
+  {
+    "id": "resignation-notice-01",
+    "question": "How many days' notice must a consultant give to resign, and how must the resignation be submitted?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 25",
+    "expected_answer": "30 days' notice is mandatory. The resignation must be submitted in hard copy; a resignation letter submitted by email is not considered valid."
+  },
+  {
+    "id": "full-final-settlement-01",
+    "question": "How soon after leaving is a consultant's full and final settlement disbursed?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 25",
+    "expected_answer": "Within 15 days of the consultant leaving the organization, subject to completion of exit formalities."
+  },
+  {
+    "id": "appraisal-cycle-01",
+    "question": "What financial year does NHSRC use for its Annual Performance Appraisal, and when does the process start?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 28",
+    "expected_answer": "1 April to 31 March; the Appraisal Process commences in the month of January."
+  },
+  {
+    "id": "sabbatical-max-01",
+    "question": "How many sabbaticals can a consultant take during their tenure, and how long can each one last?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 35",
+    "expected_answer": "A maximum of 2 sabbaticals, each up to 3 months (exceptionally 6 months, subject to Executive Director approval)."
+  },
+  {
+    "id": "id-card-validity-01",
+    "question": "How long is an NHSRC Identity Card valid for?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 39",
+    "expected_answer": "Up to the last date of the consultant's contract."
+  },
+  {
+    "id": "financial-powers-ed-01",
+    "question": "What is the Executive Director's financial approval limit per transaction?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 41",
+    "expected_answer": "Rs. 35 lakhs per transaction. PAO's limit is Rs. 50,000, Advisors' is Rs. 20,000, and Director RRC-NE's is Rs. 5 lakhs."
+  },
+  {
+    "id": "travel-advance-ceiling-01",
+    "question": "What is the ceiling on a travel advance as a percentage of anticipated expenditure?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 49",
+    "expected_answer": "Up to 75% of anticipated expenditure. If the air ticket is self-booked, 100% of the ticket value plus 75% of other expenses is given."
+  },
+  {
+    "id": "summer-internship-duration-01",
+    "question": "What is the maximum and minimum duration of a summer internship at NHSRC?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 58",
+    "expected_answer": "Maximum duration is three months and minimum duration is one month."
+  },
+  {
+    "id": "emergency-app-01",
+    "question": "What emergency app must NHSRC staff download and activate before official travel?",
+    "answerable": true,
+    "expected_doc_id": "hr-policy-dec-2025",
+    "expected_section": "Part 67",
+    "expected_answer": "The Government of India's 112 Emergency App (mandatory). The SOS Alert App may also be downloaded to notify up to five nominated contacts during an emergency."
+  },
+  {
+    "id": "neg-equity-01",
+    "question": "Does NHSRC offer stock options or equity compensation to consultants?",
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
+  },
+  {
+    "id": "neg-gym-01",
+    "question": "Is there a gym membership reimbursement benefit?",
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
+  },
+  {
+    "id": "neg-relocation-01",
+    "question": "Does NHSRC provide a relocation allowance for staff moving to a new city?",
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
+  },
+  {
+    "id": "neg-pet-01",
+    "question": "What is NHSRC's policy on bringing pets to the office?",
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
+  },
+  {
+    "id": "neg-visa-01",
+    "question": "Does NHSRC sponsor work visas for international candidates?",
+    "answerable": false,
+    "expected_doc_id": null,
+    "expected_section": null,
+    "expected_answer": "I don't have enough information in the current policy documents to answer that."
+  },
+  {
+    "id": "neg-general-02",
+    "question": "Who won the last cricket world cup?",
     "answerable": false,
     "expected_doc_id": null,
     "expected_section": null,

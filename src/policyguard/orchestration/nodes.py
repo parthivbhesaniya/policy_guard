@@ -121,6 +121,25 @@ _POLICY_KEYWORDS = {
     "it", "hr", "allowance", "expense", "benefit", "claim", "reimbursement"
 }
 
+_NAME_INTRO_REGEX = re.compile(
+    r"^(?:hi|hello|hey)?[\s,!.]*"
+    r"(?:my\s+name\s+is|i\s*am|i'm|this\s+is|call\s+me)\s+"
+    r"([a-zA-Z][a-zA-Z'\-]*(?:\s+[a-zA-Z][a-zA-Z'\-]*){0,2})"
+    r"[\s!.,?]*$",
+    re.IGNORECASE,
+)
+
+
+def extract_name_introduction(text: str) -> str | None:
+    """Returns the stated name if `text` is a self-introduction (e.g. "my name is X"), else None."""
+    match = _NAME_INTRO_REGEX.match(text.strip())
+    if not match:
+        return None
+    name = match.group(1).strip()
+    if set(re.findall(r"\b\w+\b", name.lower())).intersection(_POLICY_KEYWORDS):
+        return None
+    return " ".join(part.capitalize() for part in name.split())
+
 
 _OUT_OF_SCOPE_REGEX = re.compile(
     r"\b(capital\s+of|weather\s+in|recipe|joke|coding|python\s+script|binary\s+search|calculate|math|who\s+won|president\s+of|movie|song)\b",
@@ -141,6 +160,8 @@ def is_greeting(text: str) -> bool:
     if len(words) <= 3 and any(w in {"hi", "hello", "hey", "greetings", "thanks", "thank"} for w in words):
         if not words.intersection(_POLICY_KEYWORDS):
             return True
+    if extract_name_introduction(text) is not None:
+        return True
     return False
 
 
@@ -178,10 +199,17 @@ def route_after_rewrite(state: GraphState) -> str:
 
 
 def handle_greeting(state: GraphState, config: RunnableConfig | None = None) -> dict:
-    answer_text = (
-        "Hello! I am PolicyGuard, your assistant for company HR and IT policy questions. "
-        "How can I help you today?"
-    )
+    name = extract_name_introduction(state["question"])
+    if name:
+        answer_text = (
+            f"Hi {name}! I am PolicyGuard, your assistant for company HR and IT policy questions. "
+            "How can I help you today?"
+        )
+    else:
+        answer_text = (
+            "Hello! I am PolicyGuard, your assistant for company HR and IT policy questions. "
+            "How can I help you today?"
+        )
     token_queue = (config or {}).get("configurable", {}).get("token_queue")
     if token_queue is not None:
         token_queue.put(answer_text)

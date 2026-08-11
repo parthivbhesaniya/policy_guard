@@ -26,6 +26,7 @@ handling real policy questions.
   - [Managing policy documents](#managing-policy-documents)
   - [Usage](#usage)
   - [API \& UI](#api--ui)
+  - [Containerization (Docker)](#containerization-docker)
   - [Testing](#testing)
   - [Evaluation \& results](#evaluation--results)
   - [Engineering highlights](#engineering-highlights)
@@ -47,7 +48,7 @@ produce and easy to catch.
 ![PolicyGuard StateGraph Architecture](./graph_structure.png)
 
 ```
-data/policies/*.md                 data/eval/golden_dataset.json
+data/policies/*.md, *.pdf          data/eval/golden_dataset.json
        │                                       │
        ▼                                       ▼
 ┌─────────────────────┐              ┌──────────────────────┐
@@ -95,7 +96,9 @@ Every arrow above is a real, tested code path — not aspirational. See
 
 - **Hierarchical chunking with Markdown table preservation & PDF parent-child windowing.** Markdown policy docs are split by heading level (`##` parent sections, `###` child subsections) with table-block preservation (`| ... |`) so markdown table headers and rows are never severed across chunk boundaries. PDF docs generate parent context windows (~2000 chars) for complete LLM section context linked to precise child retrieval windows (~600 chars) via `parent_id`.
 - **Smart Intent Guardrails & Pre-Retrieval Routing.** Fast intent classification checks incoming queries before vector search runs, routing non-policy questions away from retrieval:
-  - *Greetings*: Inputs like `"hi"` or `"hello"` receive instant friendly welcome responses.
+  - *Greetings*: Inputs like `"hi"` or `"hello"` receive instant friendly welcome responses. A
+    self-introduction (`"my name is Harshil"`, `"I'm Alex"`) is recognized as a greeting too and
+    gets a personalized `"Hi Harshil!"` reply instead of being mistaken for a policy question.
   - *Out-of-Scope*: General trivia, math, or coding queries receive polite guidance explaining PolicyGuard's policy domain.
   - *Ambiguity Clarification*: Overly broad questions (*"tell me the policy"*) prompt the user to specify their policy topic area (Leave, WFH, IT, Expenses).
 - **Hybrid retrieval, not just vector similarity.** Dense embedding search (Chroma) and BM25
@@ -126,12 +129,13 @@ Every arrow above is a real, tested code path — not aspirational. See
   under a `thread_id`. A *separate* CLI invocation, in a separate process, resumes it later with
   an approve/edit/reject decision — proving the "resumable across sessions" requirement rather
   than faking it with an in-memory `input()` prompt.
-- **A real evaluation harness, not a vibe check.** A 24-example golden Q&A dataset (covering
-  every policy section plus deliberately unanswerable questions) is scored on four metrics —
-  two deterministic, two LLM-judged — locally or as a tracked LangSmith experiment.
+- **A real evaluation harness, not a vibe check.** A 49-example golden Q&A dataset (covering
+  26 distinct sections of the ingested policy document plus 12 deliberately unanswerable
+  questions) is scored on four metrics — two deterministic, two LLM-judged — locally or as a
+  tracked LangSmith experiment.
 - **Fully dependency-injected.** The LLM, retriever, reranker, and checkpointer are all
-  swappable at the function-call boundary. The entire 63-test suite runs against fakes/temp
-  local stores in ~12 seconds — no live API calls, no network flakiness, no API cost to run CI.
+  swappable at the function-call boundary. The entire 103-test suite runs against fakes/temp
+  local stores in ~20 seconds — no live API calls, no network flakiness, no API cost to run CI.
 
 ## Tech stack — why each piece is there
 
@@ -151,15 +155,16 @@ Every arrow above is a real, tested code path — not aspirational. See
 | Config | **python-dotenv** | Loads API keys from a gitignored `.env` — nothing secret is hardcoded or committed. |
 | API | **FastAPI** | Thin HTTP wrapper around the same compiled graph the CLI uses — `/ask` and `/resolve`, including the interrupt/resume flow, over a stable JSON contract instead of stdin/stdout. |
 | UI | **Streamlit** | Minimal chat UI on top of the API — question in, cited answer out, with approve/edit/reject controls when a thread pauses for human review. |
-| Testing | **pytest** | 91 tests across every layer, built almost entirely on fakes (`FakeLLM`, `FakeCohereClient`) and real-but-temporary Chroma stores (`tmp_path`) instead of mocking/patching internals. |
+| Testing | **pytest** | 103 tests across every layer, built almost entirely on fakes (`FakeLLM`, `FakeCohereClient`) and real-but-temporary Chroma stores (`tmp_path`) instead of mocking/patching internals. |
+| Containerization | **Docker** / Compose | An `api` + `ui` service pair sharing one image, plus a one-off `ingest` profile — persists `chroma_db` and `checkpoints.sqlite` to the host and reuses the host's Chroma embedding-model cache instead of re-downloading it per container. |
 
 ## Project structure
 
 ```
 policyguard/
 ├── data/
-│   ├── policies/                 # Sample HR + IT policy docs (Markdown + YAML front matter)
-│   └── eval/golden_dataset.json  # 24-example golden Q&A set (question, answer, source, answerable)
+│   ├── policies/                 # Policy docs to ingest (Markdown + YAML front matter, or PDF)
+│   └── eval/golden_dataset.json  # 49-example golden Q&A set (question, answer, source, answerable)
 ├── src/policyguard/
 │   ├── ingestion/                # Loading, chunking, Chroma vector store
 │   │   ├── loader.py             #   Markdown: parses YAML front matter + body
@@ -191,7 +196,7 @@ policyguard/
 │   │   └── schemas.py                 #   request/response pydantic models
 │   └── ui/                           # Minimal Streamlit UI
 │       └── app.py                     #   chat UI calling the API, incl. review approve/edit/reject & clear chat
-└── tests/                              # 100 tests, one file per module above
+└── tests/                              # 103 tests, one file per module above
 ```
 
 ## Getting started
@@ -215,7 +220,8 @@ cp .env.example .env
 | `COHERE_API_KEY` | Reranking (or pass `--no-rerank`) | Free tier at [dashboard.cohere.com](https://dashboard.cohere.com/api-keys) |
 | `LANGSMITH_API_KEY` | `run_eval --langsmith` only | Optional — local eval mode works without it |
 
-Ingest the sample policy docs into a local Chroma store:
+Drop your own policy docs (Markdown or PDF) into `data/policies/`, then ingest them into a local
+Chroma store:
 
 ```bash
 python -m policyguard.ingestion.ingest --input data/policies --persist-dir ./chroma_db
@@ -403,24 +409,68 @@ approve/edit/reject buttons that appear automatically when a thread pauses for r
 streamlit run src/policyguard/ui/app.py
 ```
 
+## Containerization (Docker)
+
+The whole stack (API + UI) also runs without a local Python environment at all — just Docker.
+
+```bash
+cp .env.example .env   # if you haven't already; the containers read the same file
+docker compose up -d api ui
+```
+
+- **API** → http://localhost:8000 (`/health`, `/ask`, `/resolve`, `/docs`)
+- **UI** → http://localhost:8501 (talks to the `api` service by its Compose network name, via
+  the `POLICYGUARD_API_URL` env var — no manual URL entry needed)
+
+Re-run ingestion inside a container (useful if you don't want `pip install`ed locally at all):
+
+```bash
+docker compose --profile tools run --rm ingest
+```
+
+```bash
+docker compose down            # stop everything
+docker compose logs -f api     # tail a service's logs
+```
+
+A few things about how this is wired, worth knowing before you change it:
+
+- **[Dockerfile](./Dockerfile)** is a single `python:3.11-slim` stage with no compiler toolchain
+  — every dependency here (`chromadb`, `onnxruntime`, `pypdfium2`, `opencv-python` via
+  `rapidocr-onnxruntime`) ships a prebuilt manylinux wheel, so `build-essential` isn't needed and
+  skipping it keeps both the image and the build itself lighter. The only apt packages installed
+  are `libgl1`/`libglib2.0-0`, which `opencv-python` needs at runtime.
+- **[docker-compose.yml](./docker-compose.yml)** defines `api`, `ui`, and a one-off `ingest`
+  profile, all built from the same image. `chroma_db/` and `checkpoints.sqlite` are bind-mounted
+  to the host so the vector store and LangGraph checkpoints persist across `docker compose down`
+  the same way they would running locally.
+- It also bind-mounts `~/.cache/chroma` into the containers. Chroma's default embedding function
+  lazily downloads a ~79 MB ONNX model (`all-MiniLM-L6-v2`) on first use; without this mount, a
+  fresh container re-downloads it on every rebuild, which is slow on a constrained connection.
+  Reusing the host's copy means containers start warm.
+- The `api` service has a Compose healthcheck against `/health`; `ui` declares
+  `depends_on: api: condition: service_healthy`, so the UI never starts pointing at a backend
+  that isn't ready yet.
+
 ## Testing
 
 ```bash
 pytest
 ```
 
-91 tests, ~16 seconds, zero live API calls:
+103 tests, ~20 seconds, zero live API calls:
 
 | File | Tests | Covers |
 | --- | --- | --- |
-| `test_chunker.py` | 6 | Hierarchical chunking, parent/child linking, metadata propagation |
-| `test_pdf_ingestion.py` | 19 | Flat window chunking, overlap, sidecar YAML metadata validation, guessed-default fallback |
+| `test_chunker.py` | 8 | Hierarchical chunking, parent/child linking, metadata propagation |
+| `test_pdf_ingestion.py` | 21 | Flat window chunking, overlap, sidecar YAML metadata validation, guessed-default fallback |
 | `test_chain.py` | 5 | Context-block deduping, prompt construction |
 | `test_citations.py` | 4 | Citation parsing + validation |
 | `test_retrieval.py` | 9 | BM25 exact-match, RRF fusion, Cohere reranker (via fake client) |
-| `test_orchestration.py` | 30 | Every node, every routing decision, conversation-history resolution, full-graph integration incl. interrupt/resume, via a `FakeLLM` |
+| `test_orchestration.py` | 37 | Every node, every routing decision (incl. self-introduction greetings), conversation-history resolution, full-graph integration incl. interrupt/resume, via a `FakeLLM` |
 | `test_evaluation.py` | 16 | Dataset integrity, both programmatic metrics, both LLM-judge metrics (via fake LLM) |
 | `test_vectorstore.py` | 2 | `delete_document` removes only the targeted doc's chunks, no-ops for an unknown doc id |
+| `test_api_streaming.py` | 1 | Streaming `/ask` response shape |
 
 The orchestration tests are the ones worth highlighting: they run the **actual compiled
 LangGraph app** — including the interrupt/checkpoint/resume cycle against a real
@@ -429,18 +479,32 @@ verified, not just each node in isolation.
 
 ## Evaluation & results
 
-Baseline recorded against the two sample policy docs with `llama-3.3-70b-versatile`:
+Latest run of the full 49-example golden dataset against the real ingested policy document
+(`hr-policy-dec-2025`, a 38-page government HR/admin policy PDF), with `llama-3.3-70b-versatile`:
 
 | Metric | Score |
 | --- | --- |
-| recall@k | 1.00 |
-| citation_accuracy | 1.00 |
-| faithfulness | 0.96 |
-| answer_relevance | 0.83 |
+| recall@k | 0.88 |
+| citation_accuracy | 0.61 |
+| faithfulness | 1.00 |
+| answer_relevance | 0.98 |
 
-The last two numbers moved after fixing two evaluator bugs uncovered *by* this baseline run —
-see below. Live re-verification of the corrected scores is pending a Groq quota reset (rate
-limits from a free-tier account, not a system issue).
+Faithfulness is perfect across all 49 questions — no hallucinated claims. citation_accuracy is
+the weak spot, and `run_eval`'s per-example failure log points at two distinct, fixable causes
+rather than one vague "citations are unreliable":
+
+1. **Citations omitted on correct answers.** Several answers are factually right but ship with
+   no `[source: ...]` tag at all, so `citation_accuracy` scores 0 even though nothing is
+   factually wrong.
+2. **Citation granularity drift.** The model sometimes cites a sub-clause or appendix label
+   (`Part 14(b)(i)`, `Part VI (g)`, `Appendix-A, 5`) instead of the exact `Part N` string the
+   chunk is actually indexed under, so citation-validation rejects it as an "invalid citation"
+   even when it's pointing at essentially the right place.
+
+recall@k misses are concentrated on facts that sit in overlapping/boundary-adjacent chunks (e.g.
+a leave entitlement whose full description spans two consecutive `Part N` sections) — retrieval
+sometimes surfaces the semantically-similar neighbor chunk instead of the exact one the golden
+example was graded against.
 
 ## Engineering highlights
 
@@ -489,5 +553,19 @@ LLM, not just reading the architecture doc:
   as Markdown and once as a differently-`doc_id`'d PDF) surfaced that gap directly, which is why
   `PolicyVectorStore.delete_document(doc_id)` exists: it clears every parent/child chunk under a
   doc_id before a rename/replace/removal leaves orphaned vectors behind.
+- **Rebuilt the golden dataset against the real corpus instead of trusting stale fixtures.**
+  When the sample policy docs were swapped for a real 38-page government HR/admin PDF, the
+  existing 24-example golden dataset kept referencing `doc_id`s (`hr-leave-policy`,
+  `it-security-policy`) that no longer existed in the store — every IT-security question was
+  silently unanswerable by construction, not because of a retrieval bug. Every one of the 49
+  replacement examples was written by reading the actual ingested parent chunks back out of
+  Chroma first, so `expected_doc_id`/`expected_section` are ground truth, not guesses.
+- **A regex-based intent router had a silent blind spot for self-introductions.** Typing "my
+  name is Harshil" skipped the greeting path entirely — `is_greeting()` only matched a fixed set
+  of greeting words, so the message fell through to full RAG retrieval, got paraphrased by the
+  query-rewrite LLM into something search-shaped, and returned a confidently-cited but nonsensical
+  answer about the onboarding/induction policy. Fixed by extending intent classification to
+  recognize self-introduction phrasing (`"my name is X"`, `"I'm X"`, `"call me X"`) and routing it
+  through the same no-retrieval greeting path, now with a personalized reply.
 
 

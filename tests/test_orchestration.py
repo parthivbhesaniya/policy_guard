@@ -381,6 +381,23 @@ def test_is_greeting():
     assert nodes.is_greeting("what is the WFH policy?") is False
 
 
+def test_is_greeting_recognizes_self_introduction():
+    assert nodes.is_greeting("my name is harshil") is True
+    assert nodes.is_greeting("hi, my name is harshil") is True
+    assert nodes.is_greeting("I am John Smith") is True
+    assert nodes.is_greeting("I'm Alex") is True
+    assert nodes.is_greeting("call me Sam") is True
+    # Not every "I am ..." / "my name is ..." should be swallowed -- only bare introductions.
+    assert nodes.is_greeting("I am on probation, what leave can I take") is False
+    assert nodes.is_greeting("my name is on the leave form") is False
+
+
+def test_extract_name_introduction():
+    assert nodes.extract_name_introduction("my name is harshil") == "Harshil"
+    assert nodes.extract_name_introduction("I am John Smith") == "John Smith"
+    assert nodes.extract_name_introduction("what is the WFH policy?") is None
+
+
 def test_graph_handles_greeting_without_retrieval(tmp_path):
     store = _build_test_store(tmp_path)
     llm = FakeLLM(["hi"])
@@ -388,6 +405,17 @@ def test_graph_handles_greeting_without_retrieval(tmp_path):
     result = app.invoke(initial_state("hi"))
 
     assert "PolicyGuard" in result["answer"]
+    assert result["grounded"] is True
+    assert result["citations"] == []
+
+
+def test_graph_greets_user_by_name_without_retrieval(tmp_path):
+    store = _build_test_store(tmp_path)
+    llm = FakeLLM(["my name is harshil"])
+    app = build_graph(store, llm=llm)
+    result = app.invoke(initial_state("my name is harshil"))
+
+    assert "Hi Harshil!" in result["answer"]
     assert result["grounded"] is True
     assert result["citations"] == []
 
