@@ -1,5 +1,2 @@
-# apt packages Streamlit Community Cloud installs before `pip install -r requirements.txt`.
-# Runtime libs opencv-python (pulled in by rapidocr-onnxruntime, used for PDF OCR fallback)
-# needs -- mirrors the Dockerfile's apt-get install.
 libgl1
 libglib2.0-0
