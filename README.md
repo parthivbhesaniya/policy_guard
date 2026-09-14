@@ -2,6 +2,8 @@
 
 **An agentic, self-correcting, evaluated RAG system for enterprise HR/IT policy Q&A.**
 
+🔗 **Live demo:** [policyguard-parthiv.streamlit.app](https://policyguard-parthiv.streamlit.app)
+
 PolicyGuard answers employee questions strictly from a company's internal policy documents - with forced, verified citations, an LLM-driven hallucination check that retries itself before
 answering, human-in-the-loop escalation with real checkpointing for anything it can't verify,
 and a golden-dataset evaluation harness to measure all of it. It's built to demonstrate
