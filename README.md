@@ -26,6 +26,7 @@ handling real policy questions.
   - [Managing policy documents](#managing-policy-documents)
   - [Usage](#usage)
   - [API \& UI](#api--ui)
+  - [Deploying on Streamlit Community Cloud](#deploying-on-streamlit-community-cloud)
   - [Containerization (Docker)](#containerization-docker)
   - [Testing](#testing)
   - [Evaluation \& results](#evaluation--results)
@@ -141,7 +142,7 @@ Every arrow above is a real, tested code path — not aspirational. See
 
 | Layer | Technology | What it's doing here |
 | --- | --- | --- |
-| LLM inference | **Groq** (Llama 3.x) via `langchain-groq` | Fast, free-tier-friendly inference for every LLM call in the graph — rewriting, grading, generation, verification, and evaluation judging all go through one interchangeable `BaseChatModel`. |
+| LLM inference | **Groq** (`openai/gpt-oss-20b` by default, configurable via `GROQ_MODEL`) via `langchain-groq` | Fast, free-tier-friendly inference for every LLM call in the graph — rewriting, grading, generation, verification, and evaluation judging all go through one interchangeable `BaseChatModel`. |
 | Orchestration | **LangGraph** `StateGraph` | The centerpiece: models the agent as an explicit graph with conditional routing (`grade_documents` → generate or bail) and a real cycle (`verify_answer` → retry `generate`), not a linear chain pretending to be an agent. |
 | Vector search | **ChromaDB** (persistent, local embeddings) | Stores parent/child chunk collections and runs dense similarity search — no external embedding API required. |
 | PDF ingestion | **pypdf** | Pure-Python text extraction for PDF policy docs (no compiled/native deps) — no torch-style wheel-availability risk. |
@@ -216,7 +217,7 @@ cp .env.example .env
 | Variable | Required for | Notes |
 | --- | --- | --- |
 | `GROQ_API_KEY` | Everything past ingestion | Free tier at [console.groq.com](https://console.groq.com/keys) |
-| `GROQ_MODEL` | — | Defaults to `llama-3.3-70b-versatile` |
+| `GROQ_MODEL` | — | Defaults to `openai/gpt-oss-20b` |
 | `COHERE_API_KEY` | Reranking (or pass `--no-rerank`) | Free tier at [dashboard.cohere.com](https://dashboard.cohere.com/api-keys) |
 | `LANGSMITH_API_KEY` | `run_eval --langsmith` only | Optional — local eval mode works without it |
 
@@ -409,6 +410,49 @@ approve/edit/reject buttons that appear automatically when a thread pauses for r
 streamlit run src/policyguard/ui/app.py
 ```
 
+## Deploying on Streamlit Community Cloud
+
+[ui/app.py](src/policyguard/ui/app.py) is self-contained: it builds and runs the LangGraph
+orchestrator directly in-process (`build_graph()` + `.invoke()`/`.stream()`), rather than calling
+the FastAPI service over HTTP. This is what makes it deployable on Streamlit Community Cloud as a
+single app, with nothing else to host.
+
+1. Push this repo to GitHub, then create a new app at [share.streamlit.io](https://share.streamlit.io)
+   pointing at it.
+2. **Main file path:** `src/policyguard/ui/app.py`
+3. **App settings → Secrets**, add at minimum:
+   ```toml
+   GROQ_API_KEY = "..."
+   GROQ_MODEL = "..."       # must be a model your Groq key actually has access to -- see below
+   COHERE_API_KEY = "..."   # optional; reranking is skipped automatically if omitted
+   ```
+4. Deploy. The repo's [requirements.txt](requirements.txt) (`-e .[ui]`, installing this package
+   plus its `ui` extra from `pyproject.toml`) and [packages.txt](packages.txt) (apt libs the PDF
+   OCR fallback needs) are picked up automatically by Streamlit Cloud's build.
+
+A few things specific to this deployment path, not the local/Docker one:
+
+- **No `POLICYGUARD_API_URL` to set** — there's no second service. The FastAPI app
+  ([api/app.py](src/policyguard/api/app.py)) still exists and still works for local/Docker use,
+  it's just not part of this deployment.
+- **Ephemeral filesystem.** Streamlit Cloud's disk resets on every restart/redeploy, so
+  `chroma_db/` doesn't persist between cold starts. `ui/app.py` handles this itself: on first
+  load it checks whether the vector store is empty and, if so, ingests everything in
+  `data/policies/` before serving any questions (cached for the app's lifetime via
+  `st.cache_resource`, so it only happens once per restart, not once per user). The same goes for
+  the human-review checkpoint state — it uses an in-memory `InMemorySaver` instead of the local
+  `SqliteSaver`, since a durable file wouldn't survive a restart here either. A paused
+  `needs_review` thread only survives as long as the app process stays up.
+- **Verify your `GROQ_MODEL` before deploying.** Groq's available model list is account/key
+  specific and changes over time — even this README's documented default (`openai/gpt-oss-20b`)
+  may not exist for your key. Check what your key can actually use:
+  ```bash
+  curl -s https://api.groq.com/openai/v1/models -H "Authorization: Bearer $GROQ_API_KEY" | jq -r '.data[].id'
+  ```
+  and also check the output-tokens-per-minute limit on whatever model you pick — a low-tier
+  model's OTPM cap can be too small for a full policy answer with citations, which surfaces as an
+  HTTP 429 from Groq.
+
 ## Containerization (Docker)
 
 The whole stack (API + UI) also runs without a local Python environment at all — just Docker.
@@ -480,7 +524,9 @@ verified, not just each node in isolation.
 ## Evaluation & results
 
 Latest run of the full 49-example golden dataset against the real ingested policy document
-(`hr-policy-dec-2025`, a 38-page government HR/admin policy PDF), with `llama-3.3-70b-versatile`:
+(`hr-policy-dec-2025`, a 38-page government HR/admin policy PDF), with `llama-3.3-70b-versatile`
+(the project's default model at the time of this run — since deprecated by Groq and replaced by
+`openai/gpt-oss-20b`; these numbers haven't been re-measured against the new default yet):
 
 | Metric | Score |
 | --- | --- |

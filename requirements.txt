@@ -1,0 +1,4 @@
+# Streamlit Community Cloud installs from this file. `-e .[ui]` installs PolicyGuard itself
+# (in editable mode) plus its `ui` extra (streamlit, requests) -- every other dependency is
+# pulled from pyproject.toml, so versions stay defined in exactly one place.
+-e .[ui]

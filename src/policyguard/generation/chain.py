@@ -17,7 +17,7 @@ from policyguard.generation.citations import Citation, parse_citations, validate
 from policyguard.generation.prompts import SYSTEM_PROMPT, build_user_prompt
 from policyguard.ingestion.vectorstore import PolicyVectorStore
 
-DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
 
 
 @dataclass

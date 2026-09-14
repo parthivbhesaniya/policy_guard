@@ -1,27 +1,80 @@
-"""Minimal Streamlit UI for PolicyGuard, talking to the FastAPI service (policyguard.api.app).
+"""Self-contained Streamlit UI for PolicyGuard.
 
-Run the API first (see README), then:
-    streamlit run src/policyguard/ui/app.py
+Runs the LangGraph orchestrator directly in-process (build_graph + .invoke/.stream) instead of
+calling a separate FastAPI backend -- this is the single file to deploy on Streamlit Community
+Cloud: no second service to host, no POLICYGUARD_API_URL to wire up.
+
+Required secrets (Streamlit Cloud: App settings -> Secrets, or a local .env for `streamlit run`):
+    GROQ_API_KEY        -- required
+    COHERE_API_KEY      -- optional; reranking is skipped automatically if unset
+    HUGGINGFACE_API_KEY -- optional; falls back to Chroma's local default embedder if unset
+
+The vector store and checkpoint state live only in this process's memory/disk and are rebuilt
+from data/policies/ on every cold start -- Streamlit Cloud's filesystem is ephemeral, so nothing
+here assumes chroma_db/ or prior conversation state survives a restart.
 """
 
 from __future__ import annotations
 
-import json
 import os
-import requests
+import queue
+import threading
+import uuid
+from pathlib import Path
+
 import streamlit as st
+from dotenv import load_dotenv
 
-DEFAULT_API_URL = os.environ.get("POLICYGUARD_API_URL", "http://localhost:8000")
+load_dotenv()
+try:
+    for _key, _value in st.secrets.items():
+        os.environ.setdefault(_key, str(_value))
+except Exception:
+    pass
 
-# How many prior Q&A turns to send back to the API for reference-resolution (e.g. "does this
-# apply to interns"), bounding how much the rewrite-query prompt grows over a long session.
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
+
+from policyguard.ingestion.ingest import ingest as ingest_policies
+from policyguard.ingestion.vectorstore import PolicyVectorStore
+from policyguard.orchestration.graph import build_graph, initial_state
+from policyguard.retrieval.reranker import CohereReranker
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PERSIST_DIR = REPO_ROOT / "chroma_db"
+POLICIES_DIR = REPO_ROOT / "data" / "policies"
+
 MAX_HISTORY_TURNS = 6
+
+_STAGE_LABELS = {
+    "rewrite_query": "Searching policy documents...",
+    "handle_greeting": "Responding...",
+    "handle_out_of_scope": "Responding...",
+    "handle_clarification": "Responding...",
+    "retrieve": "Evaluating excerpt relevance...",
+    "grade_documents": "Generating answer...",
+    "generate": "Verifying citations & groundedness...",
+}
+
+
+@st.cache_resource(show_spinner="Setting up PolicyGuard (this only happens once per restart)...")
+def get_graph():
+    store = PolicyVectorStore(PERSIST_DIR)
+
+    _ids, documents, _metadatas = store.get_all_children()
+    if not documents:
+        ingest_policies(POLICIES_DIR, PERSIST_DIR)
+
+    reranker = CohereReranker() if os.environ.get("COHERE_API_KEY") else None
+    return build_graph(store, checkpointer=InMemorySaver(), reranker=reranker)
+
+
+graph = get_graph()
 
 st.set_page_config(page_title="PolicyGuard", page_icon="📄")
 st.title("PolicyGuard")
 st.caption("Ask a question about company HR/IT policy. Answers are grounded in retrieved policy excerpts with citations.")
 
-api_url = st.sidebar.text_input("API URL", value=DEFAULT_API_URL)
 if st.sidebar.button("Clear Conversation"):
     st.session_state.history = []
     st.session_state.pending = None
@@ -58,81 +111,125 @@ def _history_payload() -> list[dict]:
     return [{"question": t["question"], "answer": t["response"]["answer"]} for t in turns]
 
 
+def _extract_interrupt_payload(item):
+    if isinstance(item, dict):
+        return item.get("value", item)
+    return getattr(item, "value", item)
+
+
+def _result_to_dict(result: dict, thread_id: str) -> dict:
+    if result.get("__interrupt__"):
+        payload = _extract_interrupt_payload(result["__interrupt__"][0])
+        return {
+            "thread_id": thread_id,
+            "status": "needs_review",
+            "answer": payload.get("draft_answer") or payload.get("answer") or "",
+            "citations": [],
+            "invalid_citations": payload.get("invalid_citations", []),
+            "human_reviewed": False,
+        }
+
+    return {
+        "thread_id": thread_id,
+        "status": "answered" if result.get("grounded") else "cannot_answer",
+        "answer": result.get("answer"),
+        "citations": result.get("citations", []),
+        "invalid_citations": result.get("invalid_citations", []),
+        "human_reviewed": result.get("human_reviewed", False),
+    }
+
+
 def ask(question: str) -> None:
-    payload = {"question": question, "history": _history_payload()}
+    thread_id = str(uuid.uuid4())
+    config = {"configurable": {"thread_id": thread_id}}
+    init_state = initial_state(question, history=_history_payload())
 
     status_box = st.status("Analyzing question...", expanded=True)
     message_placeholder = st.empty()
 
-    final_data = None
+    token_queue: queue.Queue = queue.Queue()
+    config["configurable"]["token_queue"] = token_queue
+    result_holder: dict = {}
+    error_holder: dict = {}
+
+    def run_pipeline():
+        try:
+            for update in graph.stream(init_state, config=config, stream_mode="updates"):
+                node_name = list(update.keys())[0]
+                token_queue.put({"type": "stage", "node": node_name})
+            final_state = graph.get_state(config)
+            if final_state.next:
+                snapshot = final_state.tasks[0].interrupts[0].value
+                result_holder["res"] = {"__interrupt__": [{"value": snapshot}]}
+            else:
+                result_holder["res"] = final_state.values
+        except Exception as exc:
+            error_holder["error"] = str(exc)
+        finally:
+            token_queue.put(None)
+
+    worker = threading.Thread(target=run_pipeline)
+    worker.start()
+
     full_text = ""
+    while True:
+        item = token_queue.get()
+        if item is None:
+            break
+        if isinstance(item, str):
+            full_text += item
+            message_placeholder.markdown(full_text + "▌")
+        elif isinstance(item, dict) and item.get("type") == "stage":
+            label = _STAGE_LABELS.get(item["node"])
+            if label:
+                status_box.update(label=label, state="running")
 
-    try:
-        resp = requests.post(f"{api_url}/ask/stream", json=payload, stream=True, timeout=120)
-        resp.raise_for_status()
+    worker.join()
 
-        for line in resp.iter_lines():
-            if not line:
-                continue
-            line_str = line.decode("utf-8")
-            if line_str.startswith("data: "):
-                event = json.loads(line_str[6:])
-                evt_type = event.get("type")
-                if evt_type == "status":
-                    status_box.update(label=event["content"], state="running")
-                elif evt_type == "token":
-                    full_text += event["content"]
-                    message_placeholder.markdown(full_text + "▌")
-                elif evt_type == "final":
-                    final_data = event["data"]
-                    status_box.update(label="Complete", state="complete", expanded=False)
-                elif evt_type == "error":
-                    st.error(f"Error: {event['content']}")
-                    status_box.update(label="Error", state="error")
-                    return
-
-    except Exception as exc:
-        st.error(f"Request to PolicyGuard API failed: {exc}")
-        status_box.update(label="Failed", state="error")
+    if "error" in error_holder:
+        st.error(f"PolicyGuard pipeline failed: {error_holder['error']}")
+        status_box.update(label="Error", state="error")
         return
 
-    if final_data:
-        message_placeholder.markdown(final_data.get("answer") or full_text or "*(no answer)*")
+    status_box.update(label="Complete", state="complete", expanded=False)
+    final_data = _result_to_dict(result_holder.get("res", {}), thread_id)
+    message_placeholder.markdown(final_data.get("answer") or full_text or "*(no answer)*")
 
-        citations = final_data.get("citations") or []
-        if citations:
-            st.caption("Sources: " + ", ".join(f"{c['doc_id']} · {c['section']}" for c in citations))
+    citations = final_data.get("citations") or []
+    if citations:
+        st.caption("Sources: " + ", ".join(f"{c['doc_id']} · {c['section']}" for c in citations))
 
-        invalid = final_data.get("invalid_citations") or []
-        if invalid:
-            st.warning(
-                "Model cited sources not present in the retrieved context: "
-                + ", ".join(f"{c['doc_id']} · {c['section']}" for c in invalid)
-            )
+    invalid = final_data.get("invalid_citations") or []
+    if invalid:
+        st.warning(
+            "Model cited sources not present in the retrieved context: "
+            + ", ".join(f"{c['doc_id']} · {c['section']}" for c in invalid)
+        )
 
-        if final_data.get("status") == "cannot_answer":
-            st.info("No relevant policy documents were found for this question.")
+    if final_data.get("status") == "cannot_answer":
+        st.info("No relevant policy documents were found for this question.")
 
-        if final_data["status"] == "needs_review":
-            st.session_state.pending = {"thread_id": final_data["thread_id"], "question": question, "response": final_data}
-        else:
-            st.session_state.history.append({"question": question, "response": final_data})
+    if final_data["status"] == "needs_review":
+        st.session_state.pending = {"thread_id": final_data["thread_id"], "question": question, "response": final_data}
+    else:
+        st.session_state.history.append({"question": question, "response": final_data})
 
 
 def resolve(action: str, answer: str | None = None) -> None:
     pending = st.session_state.pending
-    payload = {"thread_id": pending["thread_id"], "action": action}
+    decision = {"action": action}
     if answer is not None:
-        payload["answer"] = answer
+        decision["answer"] = answer
 
+    config = {"configurable": {"thread_id": pending["thread_id"]}}
     try:
-        resp = requests.post(f"{api_url}/resolve", json=payload, timeout=120)
-        resp.raise_for_status()
-    except requests.RequestException as exc:
-        st.error(f"Request to PolicyGuard API failed: {exc}")
+        result = graph.invoke(Command(resume=decision), config=config)
+    except Exception as exc:
+        st.error(f"Resolve failed: {exc}")
         return
 
-    st.session_state.history.append({"question": pending["question"], "response": resp.json()})
+    final_data = _result_to_dict(result, pending["thread_id"])
+    st.session_state.history.append({"question": pending["question"], "response": final_data})
     st.session_state.pending = None
 
 
