@@ -32,6 +32,7 @@ from fastapi.responses import StreamingResponse
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
+from policyguard import observability
 from policyguard.api.schemas import AskRequest, AskResponse, CitationOut, HealthResponse, ResolveRequest
 from policyguard.ingestion.vectorstore import PolicyVectorStore
 from policyguard.orchestration.graph import build_graph, initial_state
@@ -92,9 +93,10 @@ def health() -> HealthResponse:
 @app.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest) -> AskResponse:
     thread_id = request.thread_id or str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
+    config = observability.run_config("api", thread_id)
     history = [turn.model_dump() for turn in request.history]
     result = app.state.graph.invoke(initial_state(request.question, history=history), config=config)
+    observability.record_outcome(config["run_id"], result)
     return _to_response(result, thread_id)
 
 
@@ -106,12 +108,7 @@ def ask_stream(request: AskRequest) -> StreamingResponse:
 
     def event_generator():
         token_queue: queue.Queue = queue.Queue()
-        stream_config = {
-            "configurable": {
-                "thread_id": thread_id,
-                "token_queue": token_queue,
-            }
-        }
+        stream_config = observability.run_config("api", thread_id, token_queue=token_queue)
         result_holder: dict = {}
         error_holder: dict = {}
 
@@ -164,6 +161,7 @@ def ask_stream(request: AskRequest) -> StreamingResponse:
             return
 
         final_res = result_holder.get("res", {})
+        observability.record_outcome(stream_config["run_id"], final_res)
         response_obj = _to_response(final_res, thread_id)
         yield f"data: {json.dumps({'type': 'final', 'data': response_obj.model_dump()})}\n\n"
 
@@ -184,5 +182,7 @@ def resolve(request: ResolveRequest) -> AskResponse:
     if request.action == "edit":
         decision["answer"] = request.answer
 
-    result = app.state.graph.invoke(Command(resume=decision), config=config)
+    resume_config = observability.run_config("api", request.thread_id)
+    result = app.state.graph.invoke(Command(resume=decision), config=resume_config)
+    observability.record_outcome(resume_config["run_id"], result)
     return _to_response(result, request.thread_id)

@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
+from policyguard import observability
 from policyguard.ingestion.vectorstore import PolicyVectorStore
 from policyguard.orchestration.ask import DEFAULT_CHECKPOINT_DB, print_result
 from policyguard.orchestration.graph import build_graph
@@ -50,7 +51,9 @@ def main() -> None:
         if not state.next:
             parser.error(f"No pending review found for thread {args.thread_id!r}")
 
-        result = app.invoke(Command(resume=decision), config=config)
+        resume_config = observability.run_config("cli", args.thread_id)
+        result = app.invoke(Command(resume=decision), config=resume_config)
+        observability.record_outcome(resume_config["run_id"], result, background=False)
         print_result(result, args.thread_id)
 
 

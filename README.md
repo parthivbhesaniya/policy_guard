@@ -31,6 +31,7 @@ handling real policy questions.
   - [Deploying on Streamlit Community Cloud](#deploying-on-streamlit-community-cloud)
   - [Containerization (Docker)](#containerization-docker)
   - [Testing](#testing)
+  - [Observability (LangSmith)](#observability-langsmith)
   - [Evaluation \& results](#evaluation--results)
   - [Engineering highlights](#engineering-highlights)
 
@@ -140,7 +141,7 @@ Every arrow above is a real, tested code path — not aspirational. See
   Faithfulness, Answer Relevancy, Contextual Relevancy), judged by a larger model than the one
   that generates the answers — see [Evaluation & results](#evaluation--results).
 - **Fully dependency-injected.** The LLM, retriever, reranker, and checkpointer are all
-  swappable at the function-call boundary. The entire 104-test suite runs against fakes/temp
+  swappable at the function-call boundary. The entire 121-test suite runs against fakes/temp
   local stores in ~20 seconds — no live API calls, no network flakiness, no API cost to run CI.
 
 ## Tech stack — why each piece is there
@@ -157,12 +158,12 @@ Every arrow above is a real, tested code path — not aspirational. See
 | Prompts / messages | **langchain-core** | `SystemMessage`/`HumanMessage` primitives and `BaseChatModel` typing, used directly rather than through a heavier chain abstraction that the graph doesn't need. |
 | Human-in-the-loop | **LangGraph** `interrupt()` / `Command(resume=...)` | Pauses graph execution mid-node and resumes it later from an entirely different process invocation. |
 | Persistence | **langgraph-checkpoint-sqlite** | Durable, on-disk checkpointing of full graph state per `thread_id`, so paused conversations survive process restarts. |
-| Evaluation & tracing | **LangSmith** | Optional hosted experiment tracking: uploads the golden dataset once, then logs each evaluation run as a comparable, traced experiment. |
+| Evaluation & tracing | **LangSmith** | Traces every graph run (each node's prompt, output, tokens, latency) from the UI, API, CLI, and evals into one project, labelled by source and outcome, with user 👍/👎 feedback — plus optional experiment tracking for `run_eval`. |
 | RAG evaluation | **DeepEval** (judge: Groq `openai/gpt-oss-120b`) | Component-level (retrieval, generation) and end-to-end (RAG triad) LLM-judged metrics as pytest tests. A custom `DeepEvalBaseLLM` routes the judge through Groq with structured JSON output, and deliberately uses a bigger model than the generator so the judge isn't grading its own answers. |
 | Config | **python-dotenv** | Loads API keys from a gitignored `.env` — nothing secret is hardcoded or committed. |
 | API | **FastAPI** | Thin HTTP wrapper around the same compiled graph the CLI uses — `/ask` and `/resolve`, including the interrupt/resume flow, over a stable JSON contract instead of stdin/stdout. |
 | UI | **Streamlit** | Minimal chat UI on top of the API — question in, cited answer out, with approve/edit/reject controls when a thread pauses for human review. |
-| Testing | **pytest** | 104 tests across every layer, built almost entirely on fakes (`FakeLLM`, `FakeCohereClient`) and real-but-temporary Chroma stores (`tmp_path`) instead of mocking/patching internals. |
+| Testing | **pytest** | 121 tests across every layer, built almost entirely on fakes (`FakeLLM`, `FakeCohereClient`) and real-but-temporary Chroma stores (`tmp_path`) instead of mocking/patching internals. |
 | Containerization | **Docker** / Compose | An `api` + `ui` service pair sharing one image, plus a one-off `ingest` profile — persists `chroma_db` and `checkpoints.sqlite` to the host and reuses the host's Chroma embedding-model cache instead of re-downloading it per container. |
 
 ## Project structure
@@ -201,6 +202,7 @@ policyguard/
 │   │   ├── evaluators.py              #   recall@k, citation_accuracy, faithfulness, answer_relevance
 │   │   ├── run_eval.py                #   CLI: local scorecard or LangSmith experiment
 │   │   └── deepeval_judge.py          #   GroqJudge: DeepEval judge LLM on Groq
+│   ├── observability.py              # LangSmith trace labels, outcome + 👍/👎 feedback
 │   ├── api/                          # FastAPI wrapper around the compiled graph
 │   │   ├── app.py                     #   /ask, /resolve, /health
 │   │   └── schemas.py                 #   request/response pydantic models
@@ -211,7 +213,7 @@ policyguard/
 │   ├── test_retrieval.py               #   stage 1: Contextual Recall + Precision
 │   ├── test_generation.py              #   stage 2: Faithfulness + Answer Relevancy (ideal context)
 │   └── test_pipeline.py                #   stage 3: RAG triad over the full LangGraph app
-└── tests/                              # 104 tests, one file per module above
+└── tests/                              # 121 tests, one file per module above
 ```
 
 ## Getting started
@@ -233,7 +235,8 @@ cp .env.example .env
 | `GROQ_API_KEY` | Everything past ingestion | Free tier at [console.groq.com](https://console.groq.com/keys) |
 | `GROQ_MODEL` | — | Defaults to `openai/gpt-oss-20b` |
 | `COHERE_API_KEY` | Reranking (or pass `--no-rerank`) | Free tier at [dashboard.cohere.com](https://dashboard.cohere.com/api-keys) |
-| `LANGSMITH_API_KEY` | `run_eval --langsmith` only | Optional — local eval mode works without it |
+| `LANGSMITH_API_KEY` | Tracing, `run_eval --langsmith` | Optional — with `LANGSMITH_TRACING=true` every run is traced (see [Observability](#observability-langsmith)) |
+| `POLICYGUARD_ENV` | — | Labels traces by deployment, e.g. `demo` on Streamlit Cloud; defaults to `local` |
 | `DEEPEVAL_JUDGE_MODEL` | — | DeepEval judge model; defaults to `openai/gpt-oss-120b` |
 | `EVAL_INCLUDE_REASON` | — | Set to `1` to have DeepEval write the judge's reasoning per metric (off by default to save tokens) |
 
@@ -451,6 +454,11 @@ single app, with nothing else to host.
    GROQ_API_KEY = "..."
    GROQ_MODEL = "..."       # must be a model your Groq key actually has access to -- see below
    COHERE_API_KEY = "..."   # optional; reranking is skipped automatically if omitted
+   # optional -- LangSmith tracing + 👍/👎 feedback (see Observability below)
+   LANGSMITH_TRACING = "true"
+   LANGSMITH_API_KEY = "..."
+   LANGSMITH_PROJECT = "..."
+   POLICYGUARD_ENV = "demo"
    ```
 4. Deploy. The repo's [requirements.txt](requirements.txt) (`-e .[ui]`, installing this package
    plus its `ui` extra from `pyproject.toml`) and [packages.txt](packages.txt) (apt libs the PDF
@@ -528,7 +536,7 @@ A few things about how this is wired, worth knowing before you change it:
 pytest
 ```
 
-104 tests, ~20 seconds, zero live API calls (`pytest` only collects `tests/`; the DeepEval
+121 tests, ~20 seconds, zero live API calls (LangSmith tracing is forced off in `tests/conftest.py`) (`pytest` only collects `tests/`; the DeepEval
 suite in `evals/` makes real LLM calls and runs separately — see
 [Evaluation & results](#evaluation--results)):
 
@@ -543,11 +551,40 @@ suite in `evals/` makes real LLM calls and runs separately — see
 | `test_evaluation.py` | 16 | Dataset integrity, both programmatic metrics, both LLM-judge metrics (via fake LLM) |
 | `test_vectorstore.py` | 2 | `delete_document` removes only the targeted doc's chunks, no-ops for an unknown doc id |
 | `test_api_streaming.py` | 1 | Streaming `/ask` response shape |
+| `test_observability.py` | 17 | Trace labels, outcome classification, feedback sending (via a fake LangSmith client), no-op when tracing is off |
 
 The orchestration tests are the ones worth highlighting: they run the **actual compiled
 LangGraph app** — including the interrupt/checkpoint/resume cycle against a real
 `InMemorySaver` — with only the LLM swapped for a scripted fake, so the graph wiring itself is
 verified, not just each node in isolation.
+
+## Observability (LangSmith)
+
+Set `LANGSMITH_TRACING=true`, `LANGSMITH_API_KEY`, and `LANGSMITH_PROJECT` (in `.env` locally, in
+the app's Secrets on Streamlit Cloud) and every question becomes a LangSmith trace: one
+`PolicyGuard` run with a child per graph node — `rewrite_query → retrieve → grade_documents →
+generate → verify_answer` (plus retries) — showing each prompt, model output, token count, cost,
+and latency. When a user reports a wrong answer, the trace shows whether retrieval, grading, or
+generation went wrong. Tracing itself is automatic; [observability.py](src/policyguard/observability.py)
+adds what a raw trace can't tell you:
+
+| Signal | Recorded as | Values |
+| --- | --- | --- |
+| Where the run came from | trace tags + metadata | `entrypoint`: `ui` / `api` / `cli` / `eval`; `environment`: `POLICYGUARD_ENV` (e.g. `demo` vs `local`) |
+| How it ended | feedback `outcome` | `answered`, `cannot_answer`, `escalated`, `human_reviewed`, `greeting`, `out_of_scope`, `clarification` |
+| Self-correction | feedback `retries` | generation attempts beyond the first (verify loop rejected an answer) |
+| Citation problems | feedback `invalid_citations` | citations pointing at sections that weren't retrieved |
+| What users think | feedback `user_score` | 👍 = 1 / 👎 = 0, from the buttons under each answer in the Streamlit UI |
+
+Everything goes into **one LangSmith project**; filter by the `entrypoint` / `environment` tags
+to separate live demo traffic from local runs and eval runs (the DeepEval suite tags its traces
+`entrypoint:eval`). The Monitoring tab then charts latency, tokens, and errors out of the box,
+and the feedback keys above give escalation, cannot-answer, retry, and 👍/👎 rates over time.
+
+Observability never gets in the way: with tracing off every helper is a no-op (and the 👍/👎
+buttons are hidden), feedback is sent from a background thread so answers aren't delayed, and a
+LangSmith outage is logged rather than raised. The UI tells users their questions are logged
+whenever tracing is on.
 
 ## Evaluation & results
 

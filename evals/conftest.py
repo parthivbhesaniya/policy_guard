@@ -16,7 +16,9 @@ from pathlib import Path
 import pytest
 from dotenv import load_dotenv
 from langchain_core.language_models.chat_models import BaseChatModel
+from langsmith import tracing_context
 
+from policyguard import observability
 from policyguard.evaluation.deepeval_judge import GroqJudge
 from policyguard.generation.chain import default_llm
 from policyguard.ingestion.vectorstore import PolicyVectorStore
@@ -29,6 +31,15 @@ PERSIST_DIR = Path(os.environ.get("POLICYGUARD_PERSIST_DIR", "chroma_db"))
 
 # Every DeepEval metric in the suite must score at least this to pass.
 PASS_THRESHOLD = 0.7
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _label_eval_traces():
+    # With LangSmith tracing on, the generator/pipeline calls made here land in the same project as
+    # real traffic; tag them entrypoint:eval so they can be filtered out of monitoring charts.
+    tags, metadata = observability.trace_labels("eval")
+    with tracing_context(tags=tags, metadata=metadata):
+        yield
 
 
 @pytest.fixture(scope="session")

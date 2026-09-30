@@ -8,6 +8,9 @@ Required secrets (Streamlit Cloud: App settings -> Secrets, or a local .env for 
     GROQ_API_KEY        -- required
     COHERE_API_KEY      -- optional; reranking is skipped automatically if unset
     HUGGINGFACE_API_KEY -- optional; falls back to Chroma's local default embedder if unset
+    LANGSMITH_TRACING, LANGSMITH_API_KEY, LANGSMITH_PROJECT -- optional; turn on LangSmith tracing
+                           and the 👍/👎 buttons (see policyguard.observability)
+    POLICYGUARD_ENV     -- optional; labels this deployment's traces, e.g. "demo" (default "local")
 
 The vector store and checkpoint state live only in this process's memory/disk and are rebuilt
 from data/policies/ on every cold start -- Streamlit Cloud's filesystem is ephemeral, so nothing
@@ -35,6 +38,7 @@ except Exception:
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 
+from policyguard import observability
 from policyguard.ingestion.ingest import ingest as ingest_policies
 from policyguard.ingestion.vectorstore import PolicyVectorStore
 from policyguard.orchestration.graph import build_graph, initial_state
@@ -74,6 +78,8 @@ graph = get_graph()
 st.set_page_config(page_title="PolicyGuard", page_icon="📄")
 st.title("PolicyGuard")
 st.caption("Ask a question about company HR/IT policy. Answers are grounded in retrieved policy excerpts with citations.")
+if observability.tracing_enabled():
+    st.caption("Questions, answers, and 👍/👎 ratings are logged to LangSmith to monitor answer quality.")
 
 if st.sidebar.button("Clear Conversation"):
     st.session_state.history = []
@@ -104,6 +110,22 @@ def render_response(response: dict) -> None:
         st.info("No relevant policy documents were found for this question.")
     if response.get("human_reviewed"):
         st.caption("Reviewed by a human before being returned.")
+
+    feedback_widget(response.get("run_id"))
+
+
+def feedback_widget(run_id) -> None:
+    """Thumbs up/down under an answer, sent to LangSmith as feedback on that answer's trace."""
+    if run_id is None or not observability.tracing_enabled():
+        return
+    key = f"feedback_{run_id}"
+
+    def on_change():
+        choice = st.session_state.get(key)
+        if choice is not None:
+            observability.record_user_feedback(run_id, thumbs_up=choice == 1)
+
+    st.feedback("thumbs", key=key, on_change=on_change)
 
 
 def _history_payload() -> list[dict]:
@@ -141,14 +163,13 @@ def _result_to_dict(result: dict, thread_id: str) -> dict:
 
 def ask(question: str) -> None:
     thread_id = str(uuid.uuid4())
-    config = {"configurable": {"thread_id": thread_id}}
+    token_queue: queue.Queue = queue.Queue()
+    config = observability.run_config("ui", thread_id, token_queue=token_queue)
     init_state = initial_state(question, history=_history_payload())
 
     status_box = st.status("Analyzing question...", expanded=True)
     message_placeholder = st.empty()
 
-    token_queue: queue.Queue = queue.Queue()
-    config["configurable"]["token_queue"] = token_queue
     result_holder: dict = {}
     error_holder: dict = {}
 
@@ -192,7 +213,9 @@ def ask(question: str) -> None:
         return
 
     status_box.update(label="Complete", state="complete", expanded=False)
+    observability.record_outcome(config["run_id"], result_holder.get("res", {}))
     final_data = _result_to_dict(result_holder.get("res", {}), thread_id)
+    final_data["run_id"] = config["run_id"]
     message_placeholder.markdown(final_data.get("answer") or full_text or "*(no answer)*")
 
     citations = final_data.get("citations") or []
@@ -221,14 +244,17 @@ def resolve(action: str, answer: str | None = None) -> None:
     if answer is not None:
         decision["answer"] = answer
 
-    config = {"configurable": {"thread_id": pending["thread_id"]}}
+    # The resume is its own LangSmith trace (own run id), labelled with the same thread id.
+    config = observability.run_config("ui", pending["thread_id"])
     try:
         result = graph.invoke(Command(resume=decision), config=config)
     except Exception as exc:
         st.error(f"Resolve failed: {exc}")
         return
 
+    observability.record_outcome(config["run_id"], result)
     final_data = _result_to_dict(result, pending["thread_id"])
+    final_data["run_id"] = config["run_id"]
     st.session_state.history.append({"question": pending["question"], "response": final_data})
     st.session_state.pending = None
 

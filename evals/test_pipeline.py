@@ -30,8 +30,6 @@ quality; Answer Relevancy and Faithfulness are the signals to watch.
 
 from __future__ import annotations
 
-import uuid
-
 import pytest
 from deepeval import assert_test
 from deepeval.metrics import AnswerRelevancyMetric, ContextualRelevancyMetric, FaithfulnessMetric
@@ -39,6 +37,7 @@ from deepeval.test_case import LLMTestCase
 from groq import RateLimitError
 from langgraph.checkpoint.memory import InMemorySaver
 
+from policyguard import observability
 from policyguard.evaluation.dataset import GoldenExample, load_golden_dataset
 from policyguard.orchestration.graph import build_graph, initial_state
 
@@ -61,7 +60,7 @@ def test_pipeline(example: GoldenExample, app, judge, threshold, include_reason)
     if _quota["exhausted"]:
         pytest.skip("Groq daily token quota exhausted earlier in this run -- not scored")
 
-    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    config = observability.run_config("eval", thread_id=example.id)
     result = app.invoke(initial_state(example.question), config=config)
 
     escalated = bool(result.get("__interrupt__"))

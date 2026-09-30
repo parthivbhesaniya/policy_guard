@@ -23,6 +23,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langgraph.checkpoint.sqlite import SqliteSaver
 
+from policyguard import observability
 from policyguard.ingestion.vectorstore import PolicyVectorStore
 from policyguard.orchestration.graph import build_graph, initial_state
 from policyguard.retrieval.reranker import CohereReranker
@@ -82,8 +83,9 @@ def _run_interactive(app) -> None:
             return
 
         thread_id = str(uuid.uuid4())
-        config = {"configurable": {"thread_id": thread_id}}
+        config = observability.run_config("cli", thread_id)
         result = app.invoke(initial_state(question, history=history), config=config)
+        observability.record_outcome(config["run_id"], result, background=False)
         print()
         print_result(result, thread_id)
         print()
@@ -127,8 +129,9 @@ def main() -> None:
             return
 
         thread_id = args.thread_id or str(uuid.uuid4())
-        config = {"configurable": {"thread_id": thread_id}}
+        config = observability.run_config("cli", thread_id)
         result = app.invoke(initial_state(args.question), config=config)
+        observability.record_outcome(config["run_id"], result, background=False)
         print_result(result, thread_id)
 
 
