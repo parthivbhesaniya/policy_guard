@@ -135,9 +135,12 @@ Every arrow above is a real, tested code path — not aspirational. See
 - **A real evaluation harness, not a vibe check.** A 49-example golden Q&A dataset (covering
   26 distinct sections of the ingested policy document plus 12 deliberately unanswerable
   questions) is scored on four metrics — two deterministic, two LLM-judged — locally or as a
-  tracked LangSmith experiment.
+  tracked LangSmith experiment. On top of that, a **DeepEval suite** scores retrieval,
+  generation, and the full pipeline as three separate stages (Contextual Recall/Precision,
+  Faithfulness, Answer Relevancy, Contextual Relevancy), judged by a larger model than the one
+  that generates the answers — see [Evaluation & results](#evaluation--results).
 - **Fully dependency-injected.** The LLM, retriever, reranker, and checkpointer are all
-  swappable at the function-call boundary. The entire 103-test suite runs against fakes/temp
+  swappable at the function-call boundary. The entire 104-test suite runs against fakes/temp
   local stores in ~20 seconds — no live API calls, no network flakiness, no API cost to run CI.
 
 ## Tech stack — why each piece is there
@@ -155,10 +158,11 @@ Every arrow above is a real, tested code path — not aspirational. See
 | Human-in-the-loop | **LangGraph** `interrupt()` / `Command(resume=...)` | Pauses graph execution mid-node and resumes it later from an entirely different process invocation. |
 | Persistence | **langgraph-checkpoint-sqlite** | Durable, on-disk checkpointing of full graph state per `thread_id`, so paused conversations survive process restarts. |
 | Evaluation & tracing | **LangSmith** | Optional hosted experiment tracking: uploads the golden dataset once, then logs each evaluation run as a comparable, traced experiment. |
+| RAG evaluation | **DeepEval** (judge: Groq `openai/gpt-oss-120b`) | Component-level (retrieval, generation) and end-to-end (RAG triad) LLM-judged metrics as pytest tests. A custom `DeepEvalBaseLLM` routes the judge through Groq with structured JSON output, and deliberately uses a bigger model than the generator so the judge isn't grading its own answers. |
 | Config | **python-dotenv** | Loads API keys from a gitignored `.env` — nothing secret is hardcoded or committed. |
 | API | **FastAPI** | Thin HTTP wrapper around the same compiled graph the CLI uses — `/ask` and `/resolve`, including the interrupt/resume flow, over a stable JSON contract instead of stdin/stdout. |
 | UI | **Streamlit** | Minimal chat UI on top of the API — question in, cited answer out, with approve/edit/reject controls when a thread pauses for human review. |
-| Testing | **pytest** | 103 tests across every layer, built almost entirely on fakes (`FakeLLM`, `FakeCohereClient`) and real-but-temporary Chroma stores (`tmp_path`) instead of mocking/patching internals. |
+| Testing | **pytest** | 104 tests across every layer, built almost entirely on fakes (`FakeLLM`, `FakeCohereClient`) and real-but-temporary Chroma stores (`tmp_path`) instead of mocking/patching internals. |
 | Containerization | **Docker** / Compose | An `api` + `ui` service pair sharing one image, plus a one-off `ingest` profile — persists `chroma_db` and `checkpoints.sqlite` to the host and reuses the host's Chroma embedding-model cache instead of re-downloading it per container. |
 
 ## Project structure
@@ -167,7 +171,9 @@ Every arrow above is a real, tested code path — not aspirational. See
 policyguard/
 ├── data/
 │   ├── policies/                 # Policy docs to ingest (Markdown + YAML front matter, or PDF)
-│   └── eval/golden_dataset.json  # 49-example golden Q&A set (question, answer, source, answerable)
+│   └── eval/
+│       ├── golden_dataset.json     # 49-example golden Q&A set (question, answer, source, answerable)
+│       └── generation_golden.json  # ideal context per answerable question (verbatim Chroma chunks)
 ├── src/policyguard/
 │   ├── ingestion/                # Loading, chunking, Chroma vector store
 │   │   ├── loader.py             #   Markdown: parses YAML front matter + body
@@ -193,13 +199,19 @@ policyguard/
 │   ├── evaluation/                   # Golden dataset + evaluators
 │   │   ├── dataset.py                 #   golden example loader
 │   │   ├── evaluators.py              #   recall@k, citation_accuracy, faithfulness, answer_relevance
-│   │   └── run_eval.py                #   CLI: local scorecard or LangSmith experiment
+│   │   ├── run_eval.py                #   CLI: local scorecard or LangSmith experiment
+│   │   └── deepeval_judge.py          #   GroqJudge: DeepEval judge LLM on Groq
 │   ├── api/                          # FastAPI wrapper around the compiled graph
 │   │   ├── app.py                     #   /ask, /resolve, /health
 │   │   └── schemas.py                 #   request/response pydantic models
 │   └── ui/                           # Minimal Streamlit UI
 │       └── app.py                     #   chat UI calling the API, incl. review approve/edit/reject & clear chat
-└── tests/                              # 103 tests, one file per module above
+├── evals/                              # DeepEval suite (live, billed LLM calls -- not run by `pytest`)
+│   ├── conftest.py                     #   shared fixtures: judge, store, retriever, reranker, generator
+│   ├── test_retrieval.py               #   stage 1: Contextual Recall + Precision
+│   ├── test_generation.py              #   stage 2: Faithfulness + Answer Relevancy (ideal context)
+│   └── test_pipeline.py                #   stage 3: RAG triad over the full LangGraph app
+└── tests/                              # 104 tests, one file per module above
 ```
 
 ## Getting started
@@ -208,7 +220,7 @@ policyguard/
 git clone <repo-url> && cd policyguard
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev,ui]"   # add `,ui` only if you want the Streamlit UI
+pip install -e ".[dev,ui]"   # add `,ui` only if you want the Streamlit UI; `,eval` for the DeepEval suite
 
 cp .env.example .env
 # then edit .env and add your API keys (see below)
@@ -222,6 +234,8 @@ cp .env.example .env
 | `GROQ_MODEL` | — | Defaults to `openai/gpt-oss-20b` |
 | `COHERE_API_KEY` | Reranking (or pass `--no-rerank`) | Free tier at [dashboard.cohere.com](https://dashboard.cohere.com/api-keys) |
 | `LANGSMITH_API_KEY` | `run_eval --langsmith` only | Optional — local eval mode works without it |
+| `DEEPEVAL_JUDGE_MODEL` | — | DeepEval judge model; defaults to `openai/gpt-oss-120b` |
+| `EVAL_INCLUDE_REASON` | — | Set to `1` to have DeepEval write the judge's reasoning per metric (off by default to save tokens) |
 
 Drop your own policy docs (Markdown or PDF) into `data/policies/`, then ingest them into a local
 Chroma store:
@@ -377,6 +391,16 @@ python -m policyguard.evaluation.run_eval                # local scorecard
 python -m policyguard.evaluation.run_eval --langsmith     # + tracked LangSmith experiment
 ```
 
+**Run the DeepEval suite** (needs `pip install -e ".[eval]"` and an ingested `chroma_db`; each
+stage runs on its own):
+```bash
+deepeval test run evals/test_retrieval.py    # stage 1: retrieval
+deepeval test run evals/test_generation.py   # stage 2: generation
+deepeval test run evals/test_pipeline.py     # stage 3: full pipeline
+deepeval test run evals/test_pipeline.py -k "office-hours-01 or tor-approval-01"   # a subset
+EVAL_INCLUDE_REASON=1 deepeval test run evals/test_generation.py                   # with judge reasons
+```
+
 ## API & UI
 
 A FastAPI service exposes the same compiled LangGraph app the CLI uses, over HTTP instead of
@@ -504,14 +528,16 @@ A few things about how this is wired, worth knowing before you change it:
 pytest
 ```
 
-103 tests, ~20 seconds, zero live API calls:
+104 tests, ~20 seconds, zero live API calls (`pytest` only collects `tests/`; the DeepEval
+suite in `evals/` makes real LLM calls and runs separately — see
+[Evaluation & results](#evaluation--results)):
 
 | File | Tests | Covers |
 | --- | --- | --- |
 | `test_chunker.py` | 8 | Hierarchical chunking, parent/child linking, metadata propagation |
 | `test_pdf_ingestion.py` | 21 | Flat window chunking, overlap, sidecar YAML metadata validation, guessed-default fallback |
 | `test_chain.py` | 5 | Context-block deduping, prompt construction |
-| `test_citations.py` | 4 | Citation parsing + validation |
+| `test_citations.py` | 5 | Citation parsing (incl. fullwidth `【source: …】` brackets) + validation |
 | `test_retrieval.py` | 9 | BM25 exact-match, RRF fusion, Cohere reranker (via fake client) |
 | `test_orchestration.py` | 37 | Every node, every routing decision (incl. self-introduction greetings), conversation-history resolution, full-graph integration incl. interrupt/resume, via a `FakeLLM` |
 | `test_evaluation.py` | 16 | Dataset integrity, both programmatic metrics, both LLM-judge metrics (via fake LLM) |
@@ -524,6 +550,57 @@ LangGraph app** — including the interrupt/checkpoint/resume cycle against a re
 verified, not just each node in isolation.
 
 ## Evaluation & results
+
+### DeepEval suite: retrieval, generation, and the full pipeline
+
+The DeepEval suite in [evals/](evals/) measures each part of the RAG system on its own, then the
+whole thing end to end, so a bad score points at a specific component instead of "the answer
+was wrong somewhere". All three stages use the 37 answerable golden questions (the 12
+deliberately unanswerable ones have no correct context to score against), a pass mark of
+**0.7 for every metric**, and `openai/gpt-oss-120b` as the judge — a different, larger model
+than the `openai/gpt-oss-20b` generator.
+
+| Stage | What runs | Metrics | Result (37 questions) |
+| --- | --- | --- | --- |
+| 1. Retrieval | The `retrieve` node alone (hybrid search → Cohere rerank → top 4 parent chunks), on the raw question | Contextual Recall, Contextual Precision | **36 / 37 pass** |
+| 2. Generation | The `generate` node alone, fed the *ideal* context from [generation_golden.json](data/eval/generation_golden.json) so retrieval mistakes can't leak in | Faithfulness, Answer Relevancy | **35 / 37 pass** (both failures are judge errors, below) |
+| 3. Pipeline | The full LangGraph app: query rewrite → retrieve → grade → generate → verify/retry | RAG triad: Answer Relevancy, Contextual Relevancy, Faithfulness | **Faithfulness 1.0 and Answer Relevancy ≥ 0.75 on all 37**; Contextual Relevancy passes on 1 (known limitation, below) |
+
+What the failures actually mean:
+
+- **Retrieval: `tor-approval-01` (Contextual Precision 0.42)** — a real ranking weakness. The
+  chunks holding the answer are retrieved, but ranked 3rd–4th behind less relevant ones.
+  End to end it doesn't matter yet: the pipeline's query rewrite and grading step still produce
+  a perfect answer for it (stage 3 Faithfulness and Answer Relevancy both 1.0).
+- **Generation: two judge false negatives.** Both answers were read by hand and are correct and
+  fully grounded; the judge is wrong. `maternity-leave-01` (Answer Relevancy 0.33–0.67, varies
+  run to run): the judge calls the 80-days-worked eligibility condition "irrelevant" to "how
+  long is maternity leave", though the golden answer itself includes it.
+  `grievance-committee-01` (Faithfulness 0.67): the judge reads "The PAO, NHSRC" (the PAO *of*
+  NHSRC) as two separate people. Both are documented in
+  [test_generation.py](evals/test_generation.py) and expected to fail.
+- **Pipeline: Contextual Relevancy is low by design of the chunking, not answer quality**
+  (0.06–0.62 on 36 of 37 questions). The metric scores what share of the context's statements are
+  relevant to the question, and each PDF parent chunk is a ~2,000-character window spanning
+  several policy topics — the chunk that answers "what are the office hours" also covers WFH,
+  grace time, and more. The pass mark is kept at 0.7 on purpose so the number stays honest;
+  Faithfulness and Answer Relevancy are the signals that show answer quality, and both are
+  perfect or near-perfect. Smaller parent chunks would raise it, at the cost of re-ingesting and
+  re-running the other two stages.
+
+A few design choices worth knowing if you run or extend it:
+
+- **Kept out of `pytest`.** Every metric is a live, billed judge call, so the suite lives in
+  `evals/` and `pyproject.toml` sets `testpaths = ["tests"]` — a plain `pytest` never spends tokens.
+- **Free-tier friendly.** Judge reasoning is off by default (`EVAL_INCLUDE_REASON=1` turns it
+  on), and the judge retries Groq rate limits with backoff. Stage 3 stops cleanly when Groq's
+  daily token quota runs out: that test is marked "not scored" and the rest are skipped without
+  running the pipeline, so re-running the remainder with `-k` loses nothing. On Groq's free tier
+  (200K judge tokens/day) the full suite takes a few days; stage 3 alone is ~15K tokens per question.
+- **Ideal context is pinned to the vector store.** `generation_golden.json` holds chunks copied
+  verbatim from Chroma; stage 2 fails with a clear message if re-ingestion ever changes them.
+
+### Earlier harness: `run_eval` scorecard
 
 Latest run of the full 49-example golden dataset against the real ingested policy document
 (`hr-policy-dec-2025`, a 38-page government HR/admin policy PDF), with `llama-3.3-70b-versatile`
@@ -615,5 +692,16 @@ LLM, not just reading the architecture doc:
   answer about the onboarding/induction policy. Fixed by extending intent classification to
   recognize self-introduction phrasing (`"my name is X"`, `"I'm X"`, `"call me X"`) and routing it
   through the same no-retrieval greeting path, now with a personalized reply.
+- **The eval suite caught a citation-format bug that unit tests couldn't.** Reading stage-2
+  answers turned up `gpt-oss-20b` occasionally writing citations with fullwidth lenticular
+  brackets — `【source: hr-policy-dec-2025, Part 46】` instead of the requested
+  `[source: ...]`. The citation parser only recognized square brackets, so those answers
+  silently showed no sources and skipped citation validation. The parser now accepts both, with
+  a regression test built from the real answer.
+- **Read the judge's reasoning before trusting a failing score — again.** Two stage-2 failures
+  looked like generation bugs until the DeepEval judge's reasons were printed: it had misparsed
+  "The PAO, NHSRC" as two people and called a condition from the golden answer itself
+  "irrelevant". They're recorded as known judge false negatives rather than "fixed" by tuning the
+  eval until it passes.
 
 

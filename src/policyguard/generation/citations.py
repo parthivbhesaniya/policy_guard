@@ -5,7 +5,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-_CITATION_RE = re.compile(r"\[source:\s*([^,\]]+?)\s*,\s*([^\]]+?)\s*\]")
+# gpt-oss models sometimes emit the tag with fullwidth lenticular brackets (【source: ...】) instead
+# of the requested square ones, so either bracket style is accepted.
+_CITATION_RE = re.compile(r"[\[【]source:\s*([^,\]】]+?)\s*,\s*([^\]】]+?)\s*[\]】]")
 
 
 @dataclass(frozen=True)

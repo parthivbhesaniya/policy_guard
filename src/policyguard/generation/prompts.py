@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Sequence
 
 SYSTEM_PROMPT = """You are PolicyGuard, an internal assistant that answers employee questions \
-strictly from the company's HR/IT policy documents.
+strictly from the company's HR policy documents.
 
 Rules:
 - Answer ONLY using the policy excerpts provided below. Never use outside knowledge.

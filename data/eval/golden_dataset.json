@@ -21,7 +21,7 @@
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
     "expected_section": "Part 5",
-    "expected_answer": "No. Casual clothing is not permitted in the office; neat and clean formal/semi-formal clothes are expected."
+    "expected_answer": "Casual clothing is not permitted in the office; neat and clean formal/semi-formal clothes are expected."
   },
   {
     "id": "probation-length-01",
@@ -237,7 +237,7 @@
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
     "expected_section": "Part 15",
-    "expected_answer": "No. The free accidental insurance policy does not cover Summer Interns, Short Term Consultants, or Consultants on work orders."
+    "expected_answer": "The free accidental insurance policy does not cover Summer Interns, Short Term Consultants, or Consultants on work orders."
   },
   {
     "id": "medical-insurance-01",

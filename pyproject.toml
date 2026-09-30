@@ -34,6 +34,14 @@ ui = [
     "streamlit>=1.38",
     "requests>=2.32",
 ]
+eval = [
+    "deepeval>=4.2",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+# Plain `pytest` runs only the offline unit tests. The DeepEval suite in evals/ makes real,
+# billed LLM calls and is run explicitly: `deepeval test run evals/`.
+testpaths = ["tests"]

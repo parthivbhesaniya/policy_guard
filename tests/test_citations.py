@@ -19,6 +19,18 @@ def test_parse_citations_handles_multiple_tags():
     ]
 
 
+def test_parse_citations_accepts_fullwidth_brackets():
+    text = (
+        "The PAO, NHSRC, serves as Chairperson【source: hr-policy-dec-2025, Part 46】 "
+        "and the HRM as Convenor [source: hr-policy-dec-2025, Part 46]."
+    )
+    citations = parse_citations(text)
+    assert citations == [
+        Citation(doc_id="hr-policy-dec-2025", section="Part 46"),
+        Citation(doc_id="hr-policy-dec-2025", section="Part 46"),
+    ]
+
+
 def test_parse_citations_returns_empty_list_when_no_tags():
     assert parse_citations("I don't have enough information to answer that.") == []
 

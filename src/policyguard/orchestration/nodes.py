@@ -43,7 +43,7 @@ def _citation_to_dict(citation: Citation) -> dict:
     return {"doc_id": citation.doc_id, "section": citation.section}
 
 REWRITE_PROMPT = """Rewrite the employee's latest question below into a clear, specific, \
-standalone search query for retrieving relevant sections from the company's internal HR/IT \
+standalone search query for retrieving relevant sections from the company's internal HR \
 documents.
 
 Keep it short, and preserve any specific nouns, names, or entities already in the question --
