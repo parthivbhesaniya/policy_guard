@@ -43,6 +43,7 @@ from policyguard.ingestion.ingest import ingest as ingest_policies
 from policyguard.ingestion.vectorstore import PolicyVectorStore
 from policyguard.orchestration.graph import build_graph, initial_state
 from policyguard.retrieval.reranker import CohereReranker
+from policyguard.ui.errors import friendly_error_message
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PERSIST_DIR = REPO_ROOT / "chroma_db"
@@ -93,6 +94,10 @@ if "pending" not in st.session_state:
 
 
 def render_response(response: dict) -> None:
+    if response.get("status") == "error":
+        st.error(response["answer"])
+        return
+
     st.write(response.get("answer") or "*(no answer)*")
 
     citations = response.get("citations") or []
@@ -129,8 +134,9 @@ def feedback_widget(run_id) -> None:
 
 
 def _history_payload() -> list[dict]:
-    turns = st.session_state.history[-MAX_HISTORY_TURNS:]
-    return [{"question": t["question"], "answer": t["response"]["answer"]} for t in turns]
+    # Failed turns hold an error message, not a policy answer, so the LLM shouldn't see them.
+    turns = [t for t in st.session_state.history if t["response"].get("status") != "error"]
+    return [{"question": t["question"], "answer": t["response"]["answer"]} for t in turns[-MAX_HISTORY_TURNS:]]
 
 
 def _extract_interrupt_payload(item):
@@ -185,7 +191,7 @@ def ask(question: str) -> None:
             else:
                 result_holder["res"] = final_state.values
         except Exception as exc:
-            error_holder["error"] = str(exc)
+            error_holder["error"] = exc
         finally:
             token_queue.put(None)
 
@@ -208,8 +214,10 @@ def ask(question: str) -> None:
     worker.join()
 
     if "error" in error_holder:
-        st.error(f"PolicyGuard pipeline failed: {error_holder['error']}")
         status_box.update(label="Error", state="error")
+        # Stored in history (not just st.error'd) so it survives the st.rerun() after ask().
+        message = friendly_error_message(error_holder["error"])
+        st.session_state.history.append({"question": question, "response": {"status": "error", "answer": message}})
         return
 
     status_box.update(label="Complete", state="complete", expanded=False)
@@ -249,7 +257,8 @@ def resolve(action: str, answer: str | None = None) -> None:
     try:
         result = graph.invoke(Command(resume=decision), config=config)
     except Exception as exc:
-        st.error(f"Resolve failed: {exc}")
+        # Shown above the review buttons after the st.rerun(); the draft stays pending for a retry.
+        st.session_state.resolve_error = friendly_error_message(exc)
         return
 
     observability.record_outcome(config["run_id"], result)
@@ -277,6 +286,8 @@ if st.session_state.pending:
                 "Cited sources not present in the retrieved context: "
                 + ", ".join(f"{c['doc_id']} · {c['section']}" for c in pending["response"]["invalid_citations"])
             )
+        if st.session_state.get("resolve_error"):
+            st.error(st.session_state.pop("resolve_error"))
 
         col1, col2, col3 = st.columns(3)
         if col1.button("Approve"):
