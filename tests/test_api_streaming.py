@@ -2,10 +2,20 @@ import json
 
 from fastapi.testclient import TestClient
 
+import policyguard.api.app as api_app
 from policyguard.api.app import app
 
 
+class FakeReranker:
+    def rerank(self, query, matches, top_k):
+        return matches[:top_k]
+
+
 def test_ask_stream_endpoint(monkeypatch):
+    # The app's startup builds a real CohereReranker and ChatGroq, which need API keys. Neither is
+    # called here (graph.stream is faked below), so a fake reranker and a dummy Groq key suffice.
+    monkeypatch.setattr(api_app, "CohereReranker", FakeReranker)
+    monkeypatch.setenv("GROQ_API_KEY", "test-dummy-key")
     with TestClient(app) as client:
 
         def fake_stream(state, config=None, stream_mode=None):
