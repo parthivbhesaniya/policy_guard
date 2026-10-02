@@ -15,6 +15,7 @@ import re
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
 from langgraph.types import interrupt
 
 from policyguard.generation.chain import ContextBlock, build_context_blocks
@@ -325,9 +326,6 @@ def cannot_answer(state: GraphState) -> dict:
         "citations": [],
         "invalid_citations": [],
     }
-
-
-from langchain_core.runnables import RunnableConfig
 
 
 def generate(state: GraphState, llm: BaseChatModel, config: RunnableConfig | None = None) -> dict:

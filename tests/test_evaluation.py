@@ -1,4 +1,3 @@
-from pathlib import Path
 
 from policyguard.evaluation import evaluators
 from policyguard.evaluation.dataset import DEFAULT_DATASET_PATH, GoldenExample, load_golden_dataset

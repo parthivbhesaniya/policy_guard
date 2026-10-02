@@ -17,10 +17,9 @@ from pathlib import Path
 
 import chromadb
 import chromadb.utils.embedding_functions as ef
+from chromadb.api.types import EmbeddingFunction
 
 from policyguard.ingestion.chunker import Chunk
-
-from chromadb.api.types import EmbeddingFunction
 
 CHILDREN_COLLECTION = "policyguard_children"
 PARENTS_COLLECTION = "policyguard_parents"

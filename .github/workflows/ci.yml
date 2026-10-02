@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    env:
+      # Unit tests use fakes; make sure nothing reaches LangSmith or a real LLM.
+      LANGSMITH_TRACING: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check . --output-format=github
+
+      # The vector-store tests use Chroma's default ONNX embedding model (~80 MB download).
+      - name: Cache Chroma embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/chroma
+          key: chroma-onnx-${{ runner.os }}-v1
+
+      - name: Unit tests
+        run: pytest -q

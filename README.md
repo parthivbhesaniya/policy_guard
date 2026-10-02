@@ -1,5 +1,7 @@
 # PolicyGuard
 
+[![CI](https://github.com/parthivbhesaniya/policy_guard/actions/workflows/ci.yml/badge.svg)](https://github.com/parthivbhesaniya/policy_guard/actions/workflows/ci.yml)
+
 **An agentic, self-correcting, evaluated RAG system for enterprise HR/IT policy Q&A.**
 
 🔗 **Live demo:** [policyguard-parthiv.streamlit.app](https://policyguard-parthiv.streamlit.app)
@@ -533,8 +535,13 @@ A few things about how this is wired, worth knowing before you change it:
 ## Testing
 
 ```bash
+pip install -e ".[dev]"
+ruff check .   # lint: pyflakes, serious pycodestyle errors, import order (rules in pyproject.toml)
 pytest
 ```
+
+Both run on every push via GitHub Actions ([ci.yml](.github/workflows/ci.yml)); the badge at the
+top of this README shows the latest result.
 
 121 tests, ~20 seconds, zero live API calls (LangSmith tracing is forced off in `tests/conftest.py`) (`pytest` only collects `tests/`; the DeepEval
 suite in `evals/` makes real LLM calls and runs separately — see
