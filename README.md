@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/parthivbhesaniya/policy_guard/actions/workflows/ci.yml/badge.svg)](https://github.com/parthivbhesaniya/policy_guard/actions/workflows/ci.yml)
 
-**An agentic, self-correcting, evaluated RAG system for enterprise HR/IT policy Q&A.**
+**An agentic, self-correcting, evaluated RAG system for enterprise HR policy Q&A.**
 
 🔗 **Live demo:** [policyguard-parthiv.streamlit.app](https://policyguard-parthiv.streamlit.app)
 
