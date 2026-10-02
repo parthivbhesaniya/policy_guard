@@ -581,6 +581,12 @@ to separate live demo traffic from local runs and eval runs (the DeepEval suite 
 `entrypoint:eval`). The Monitoring tab then charts latency, tokens, and errors out of the box,
 and the feedback keys above give escalation, cannot-answer, retry, and 👍/👎 rates over time.
 
+![LangSmith trace of a live demo question: the node waterfall, with the user's 👍 and the outcome, retries, and invalid_citations feedback](./Lang_Smith_Dashboard/LS_Dashboard.jpeg)
+
+*A live demo question in LangSmith: each graph node's timing on the left (2.26 s, ~3.9K tokens,
+$0.0005 in total), and on the right the user's 👍 (`user_score 1.00`) next to the automatic
+`outcome`, `retries`, and `invalid_citations` feedback.*
+
 Observability never gets in the way: with tracing off every helper is a no-op (and the 👍/👎
 buttons are hidden), feedback is sent from a background thread so answers aren't delayed, and a
 LangSmith outage is logged rather than raised. The UI tells users their questions are logged
