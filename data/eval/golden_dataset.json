@@ -4,7 +4,7 @@
     "question": "What are NHSRC's standard office working hours?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 4",
+    "expected_section": "Office Procedure › Timings",
     "expected_answer": "09:00 AM to 05:30 PM, Monday to Friday, with a 30-minute lunch break from 01:00 PM to 01:30 PM."
   },
   {
@@ -12,7 +12,7 @@
     "question": "How many days per month can staff work from home without needing Executive Director approval?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 4",
+    "expected_section": "Office Procedure › Work From Home (WFH)",
     "expected_answer": "Up to 3 working days per month; beyond that requires approval from the Executive Director."
   },
   {
@@ -20,7 +20,7 @@
     "question": "Is casual clothing permitted in the NHSRC office?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 5",
+    "expected_section": "Office Procedure › Dress Code",
     "expected_answer": "Casual clothing is not permitted in the office; neat and clean formal/semi-formal clothes are expected."
   },
   {
@@ -28,7 +28,7 @@
     "question": "How long is the standard probation period for a new consultant?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 14",
+    "expected_section": "Terms of Engagement › Probation/ Extension of Probation/ Notice Period During Probation",
     "expected_answer": "Three (3) months, which may be extended up to six (6) months."
   },
   {
@@ -36,7 +36,7 @@
     "question": "What notice is required to end a contract during the probation period?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 14",
+    "expected_section": "Terms of Engagement › Probation/ Extension of Probation/ Notice Period During Probation",
     "expected_answer": "A 15-day notice by either party, or payment in lieu thereof."
   },
   {
@@ -44,7 +44,7 @@
     "question": "How long is the initial contract term offered to a consultant?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 13",
+    "expected_section": "Terms of Engagement › Contract Agreement",
     "expected_answer": "NHSRC initially offers a two-year contract, extendable subject to performance, funding, or divisional need."
   },
   {
@@ -52,7 +52,7 @@
     "question": "What's the notice period for terminating a consultant's contract outside of probation?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 13",
+    "expected_section": "Terms of Engagement › Contract Agreement",
     "expected_answer": "The contract can be terminated by NHSRC or the consultant within 30 days of the notice period, or payment in lieu thereof."
   },
   {
@@ -60,7 +60,7 @@
     "question": "What notice period is NHSRC willing to accept from a candidate's current employer before they join?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 12",
+    "expected_section": "HR Processes › Joining time/ Extensions on Joining Date",
     "expected_answer": "A 30-day notice period is acceptable; a longer one requires mutual agreement and ED approval."
   },
   {
@@ -68,7 +68,7 @@
     "question": "How much leave is a short-term consultant entitled to over a 3-month contract?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 18",
+    "expected_section": "Terms of Engagement › Short Term Consultants",
     "expected_answer": "1 leave per month, amounting to 3 leaves over a 3-month contract; all 3 can be taken at once or one at a time."
   },
   {
@@ -76,7 +76,7 @@
     "question": "What is the notice period for short-term consultants?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 19",
+    "expected_section": "Terms of Engagement › Short Term Consultants",
     "expected_answer": "7 days."
   },
   {
@@ -84,7 +84,7 @@
     "question": "What is the monthly remuneration for Interns compared to Fellows?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 19",
+    "expected_section": "Terms of Engagement › Interns & Fellows",
     "expected_answer": "Interns are paid Rs. 45,000 per month, and Fellows are paid Rs. 50,000 per month."
   },
   {
@@ -92,7 +92,7 @@
     "question": "What is the notice period difference between Interns and Fellows?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 19",
+    "expected_section": "Terms of Engagement › Interns & Fellows",
     "expected_answer": "The notice period for Interns is 7 days, while for Fellows it is 15 days."
   },
   {
@@ -100,7 +100,7 @@
     "question": "How is Earned Leave accrued for assistant-level staff?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 33",
+    "expected_section": "Leave Rules (Assistant Level Staff) › Earned Leave",
     "expected_answer": "30 days per year, earned on a monthly basis at 2.5 days per month."
   },
   {
@@ -108,7 +108,7 @@
     "question": "How many days of Casual Leave are assistant-level staff entitled to per year, and what's the limit per instance?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 33",
+    "expected_section": "Leave Rules (Assistant Level Staff) › Casual Leave",
     "expected_answer": "8 days of Casual Leave per year; it cannot be availed for more than 2 days at a time (up to 4 days if a weekend/holiday is added at both ends)."
   },
   {
@@ -116,7 +116,7 @@
     "question": "When is a medical certificate required for sick leave?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 34",
+    "expected_section": "Leave Rules (Assistant Level Staff) › Sick Leave",
     "expected_answer": "Sick leave in excess of 3 days must be supported by a certificate from a registered medical practitioner."
   },
   {
@@ -124,7 +124,7 @@
     "question": "How long is maternity leave for eligible consultants?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 33",
+    "expected_section": "Leave Rules (Consultants- Technical and Administrative) › Maternity Leave (M/L)",
     "expected_answer": "Up to 26 weeks, or until completion of their contract, whichever is earlier, subject to having worked 80 days in the last 12 months prior to proceeding on maternity leave."
   },
   {
@@ -132,7 +132,7 @@
     "question": "What is the maximum number of leave days that can be carried forward into the next year?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 38",
+    "expected_section": "Leave Rules (Consultants- Technical and Administrative) › Leave Accumulation",
     "expected_answer": "Carry forward of leave is permitted up to a limit of 10 days in a year, subject to a ceiling of 30 days over the complete tenure."
   },
   {
@@ -140,7 +140,7 @@
     "question": "Who sits on NHSRC's Grievance Resolution Committee?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 46",
+    "expected_section": "Miscellaneaous › Grievance Redressal",
     "expected_answer": "The PAO, NHSRC (Chairperson), two Lead Consultants (Members), and the HRM (Convenor); at least one member must be a woman."
   },
   {
@@ -196,7 +196,7 @@
     "question": "Who forms Tier 1 in NHSRC's reporting chain?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 6",
+    "expected_section": "Office Procedure › Channel of Reporting",
     "expected_answer": "The Executive Director (ED), Advisors, Director RRC-NE, and PAO; all Advisors, Director RRC-NE, PAO, and Division Heads report directly to the ED."
   },
   {
@@ -204,7 +204,7 @@
     "question": "Who leads a division at NHSRC when an Advisor is absent?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 8",
+    "expected_section": "HR Processes › Various Echelons",
     "expected_answer": "A Lead Consultant can lead or head the division; in administration, Senior Consultants are expected to lead their respective sections."
   },
   {
@@ -212,7 +212,7 @@
     "question": "Who gives final approval for a position's Terms of Reference?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 9",
+    "expected_section": "HR Processes › Terms of Reference",
     "expected_answer": "The ED, NHSRC, through the PAO. The ToR for the Advisor and Principal Administrative Officer is approved by the ED in consultation with MoH&FW."
   },
   {
@@ -220,7 +220,7 @@
     "question": "How long does a recruitment advertisement stay live before applications close?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 10",
+    "expected_section": "HR Processes › Release of Advertisement (Twice a Month) / Duration of Advertisement",
     "expected_answer": "A maximum of 21 days. Advertisements are released twice a month, normally on the 5th and 20th."
   },
   {
@@ -228,7 +228,7 @@
     "question": "By how many days can a candidate's joining date be extended at most?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 12",
+    "expected_section": "HR Processes › Joining of Selected Candidate",
     "expected_answer": "The joining date cannot be extended by more than 10 days under any circumstances."
   },
   {
@@ -236,7 +236,7 @@
     "question": "Does NHSRC's free accidental insurance benefit cover Summer Interns?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 15",
+    "expected_section": "Benefits › Free Accidental Insurance",
     "expected_answer": "The free accidental insurance policy does not cover Summer Interns, Short Term Consultants, or Consultants on work orders."
   },
   {
@@ -244,7 +244,7 @@
     "question": "What percentage of the Mediclaim insurance premium does NHSRC pay?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 15",
+    "expected_section": "Benefits › Subsidized Medical Insurance",
     "expected_answer": "80% of the premium; the remaining 20% is paid by the individual, for a cashless Mediclaim cover of Rs. 5 lakhs."
   },
   {
@@ -252,7 +252,7 @@
     "question": "How many Restricted Holidays can an employee avail per year?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 17",
+    "expected_section": "Office Procedure › Timings",
     "expected_answer": "Any two Restricted Holidays as specified by DoPT in the list of Restricted Holidays."
   },
   {
@@ -260,7 +260,7 @@
     "question": "What is the maximum duration a short-term consultant's contract can be extended to, in rare circumstances?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 17",
+    "expected_section": "Terms of Engagement › Short Term Consultants",
     "expected_answer": "11 months. Normally engaged for 3 months, extendable by another 3 months, with a maximum of 11 months in very specific and rare circumstances."
   },
   {
@@ -268,7 +268,7 @@
     "question": "How is an External Consultant empanelled with NHSRC?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 22",
+    "expected_section": "Terms of Engagement › External Consultants (ECs)",
     "expected_answer": "Empanelment is done on a monthly basis by the ED's Secretariat, which maintains the list of empanelled experts and shares it with the Admin Division."
   },
   {
@@ -276,7 +276,7 @@
     "question": "How many days' notice must a consultant give to resign, and how must the resignation be submitted?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 25",
+    "expected_section": "Exit Procedure › Resignation process",
     "expected_answer": "30 days' notice is mandatory. The resignation must be submitted in hard copy; a resignation letter submitted by email is not considered valid."
   },
   {
@@ -284,7 +284,7 @@
     "question": "How soon after leaving is a consultant's full and final settlement disbursed?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 25",
+    "expected_section": "Exit Procedure › Resignation process",
     "expected_answer": "Within 15 days of the consultant leaving the organization, subject to completion of exit formalities."
   },
   {
@@ -292,7 +292,7 @@
     "question": "What financial year does NHSRC use for its Annual Performance Appraisal, and when does the process start?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 28",
+    "expected_section": "Appraisal Process › Appraisals",
     "expected_answer": "1 April to 31 March; the Appraisal Process commences in the month of January."
   },
   {
@@ -300,7 +300,7 @@
     "question": "How many sabbaticals can a consultant take during their tenure, and how long can each one last?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 35",
+    "expected_section": "Leave Rules (Consultants- Technical and Administrative) › Entitlement to Sabbatical Leave",
     "expected_answer": "A maximum of 2 sabbaticals, each up to 3 months (exceptionally 6 months, subject to Executive Director approval)."
   },
   {
@@ -308,7 +308,7 @@
     "question": "How long is an NHSRC Identity Card valid for?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 39",
+    "expected_section": "Admin Policy › Creation / Issue of ID",
     "expected_answer": "Up to the last date of the consultant's contract."
   },
   {
@@ -316,7 +316,7 @@
     "question": "What is the Executive Director's financial approval limit per transaction?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 41",
+    "expected_section": "Admin Policy › Financial approvals",
     "expected_answer": "Rs. 35 lakhs per transaction. PAO's limit is Rs. 50,000, Advisors' is Rs. 20,000, and Director RRC-NE's is Rs. 5 lakhs."
   },
   {
@@ -324,7 +324,7 @@
     "question": "What is the ceiling on a travel advance as a percentage of anticipated expenditure?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 49",
+    "expected_section": "Revised Guidelines for Travel, Travel Advances & Settlement of Advance › Procedure for Outstation Travel (Domestic)",
     "expected_answer": "Up to 75% of anticipated expenditure. If the air ticket is self-booked, 100% of the ticket value plus 75% of other expenses is given."
   },
   {
@@ -332,7 +332,7 @@
     "question": "What is the maximum and minimum duration of a summer internship at NHSRC?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 58",
+    "expected_section": "Rules of Engagement",
     "expected_answer": "Maximum duration is three months and minimum duration is one month."
   },
   {
@@ -340,7 +340,7 @@
     "question": "What emergency app must NHSRC staff download and activate before official travel?",
     "answerable": true,
     "expected_doc_id": "hr-policy-dec-2025",
-    "expected_section": "Part 67",
+    "expected_section": "Safety Awareness & Personal Protection during Official Travel › Policy & Guidelines (cont. 2)",
     "expected_answer": "The Government of India's 112 Emergency App (mandatory). The SOS Alert App may also be downloaded to notify up to five nominated contacts during an emergency."
   },
   {

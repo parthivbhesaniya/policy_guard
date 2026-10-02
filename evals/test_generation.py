@@ -15,13 +15,16 @@ Unanswerable golden questions are skipped (there is no ideal context for them).
     deepeval test run evals/test_generation.py -k "office-hours-01 or tor-approval-01"   # a subset
     EVAL_INCLUDE_REASON=1 deepeval test run evals/test_generation.py                     # with judge reasons
 
-Known judge false negatives (baseline run 2026-09-29: 35/37 pass). Both answers were read and
-are correct and fully grounded; the judge (gpt-oss-120b) is wrong, so these are expected to fail:
-- maternity-leave-01, Answer Relevancy 0.33-0.67 (varies run to run): the judge calls the
-  80-days-worked eligibility condition "irrelevant" to "how long", though the golden answer
-  includes it.
-- grievance-committee-01, Faithfulness 0.67: the judge reads "The PAO, NHSRC" (the PAO of NHSRC)
-  as two people and marks "NHSRC is Chairperson" as unsupported.
+Known judge false negatives. Every failing answer so far was read and is correct and fully
+grounded; the judge (gpt-oss-120b) is wrong, and which questions trip it varies run to run:
+- Run 2026-10-02, topic chunks (35/37 pass), both Answer Relevancy 0.67 with Faithfulness 1.0:
+  external-consultant-empanelment-01 (answer restates the golden answer almost word for word)
+  and grievance-committee-01 (lists the right members; one extra true statement about where the
+  committee's recommendations go is marked off-question).
+- Run 2026-09-29, ~2,000-char window chunks (35/37 pass): maternity-leave-01, Answer Relevancy
+  0.33-0.67 (the 80-days-worked eligibility condition called "irrelevant" to "how long", though
+  the golden answer includes it), and grievance-committee-01, Faithfulness 0.67 ("The PAO,
+  NHSRC" read as two people).
 """
 
 from __future__ import annotations

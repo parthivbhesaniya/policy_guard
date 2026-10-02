@@ -11,17 +11,19 @@ Splits a document's Markdown body by header level:
 
 Every child chunk carries a ``parent_id`` linking it back to its parent chunk.
 
-PDF documents (see ``chunk_pdf_document``) have no such heading structure to exploit, so they're
-chunked flat instead: fixed-size, paragraph-aware, overlapping windows, each acting as both its
-own parent and its own child chunk.
+PDF documents (see ``chunk_pdf_document``) have no Markdown headers, so their heading structure
+is recovered from the text (``pdf_structure``) and each topic becomes a parent chunk; a PDF with
+no recoverable structure falls back to fixed-size, paragraph-aware, overlapping windows.
 """
 
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 
 from policyguard.ingestion.loader import PolicyDocument
+from policyguard.ingestion.pdf_structure import Section, split_into_sections
 
 _PARENT_HEADER = re.compile(r"^## (?!#)(.+)$")
 _CHILD_HEADER = re.compile(r"^### (?!#)(.+)$")
@@ -101,6 +103,13 @@ DEFAULT_PDF_CHUNK_OVERLAP = 150
 _PARAGRAPH_SPLIT_RE = re.compile(r"\n\s*\n")
 
 
+# Below this many detected sections a PDF is treated as unstructured and window-chunked.
+_MIN_STRUCTURED_SECTIONS = 3
+# A parent chunk's section label is its last this-many heading levels, e.g.
+# "Leave Rules (Assistant Level Staff) › Casual Leave"; the full path heads the chunk text.
+_LABEL_DEPTH = 2
+
+
 def chunk_pdf_document(
     doc: PolicyDocument,
     chunk_size: int = DEFAULT_PDF_CHUNK_SIZE,
@@ -108,27 +117,34 @@ def chunk_pdf_document(
 ) -> tuple[list[Chunk], list[Chunk]]:
     """Returns (parent_chunks, child_chunks) for a PDF-sourced PolicyDocument.
 
-    Generates parent context windows (~2000 chars) for full section context and
-    child retrieval windows (~600 chars) linked via `parent_id` for retrieval precision.
+    When the text has recoverable headings (see ``pdf_structure``), each topic becomes one parent
+    chunk labelled by its headings -- so a chunk covers one policy topic rather than a ~2000-char
+    window spanning several. Otherwise falls back to fixed-size windows labelled "Part N".
+    Either way, parents (up to ~2000 chars) are generation context and are split into ~600-char
+    children, linked via ``parent_id``, for retrieval precision.
     """
+    parent_size = max(chunk_size, DEFAULT_PDF_PARENT_CHUNK_SIZE)
+    child_size = min(chunk_size, DEFAULT_PDF_CHILD_CHUNK_SIZE)
+
+    sections = split_into_sections(doc.body)
+    structured = len(sections) >= _MIN_STRUCTURED_SECTIONS
+    if not structured:
+        windows = _split_into_windows(doc.body, chunk_size=parent_size, overlap=overlap)
+        labelled = [(f"Part {i + 1}", f"part-{i + 1}", text) for i, text in enumerate(windows)]
+    else:
+        labelled = _labelled_section_parts(sections, parent_size)
+
     base_metadata = {
         "doc_id": doc.doc_id,
         "department": doc.department,
         "effective_date": doc.effective_date,
         "version": doc.version,
     }
-
-    parent_size = max(chunk_size, DEFAULT_PDF_PARENT_CHUNK_SIZE)
-    child_size = min(chunk_size, DEFAULT_PDF_CHILD_CHUNK_SIZE)
-
-    parent_windows = _split_into_windows(doc.body, chunk_size=parent_size, overlap=overlap)
-
     parent_chunks: list[Chunk] = []
     child_chunks: list[Chunk] = []
 
-    for i, parent_text in enumerate(parent_windows):
-        section = f"Part {i + 1}"
-        parent_id = f"{doc.doc_id}::part-{i + 1}"
+    for section, slug, parent_text in labelled:
+        parent_id = f"{doc.doc_id}::{slug}"
         parent_metadata = {**base_metadata, "section": section}
 
         parent_chunks.append(
@@ -149,7 +165,12 @@ def chunk_pdf_document(
                 )
             )
         else:
+            heading = parent_text.split("\n", 1)[0] if structured else ""
             for j, child_text in enumerate(child_windows):
+                # Every child after the first is prefixed with its section's heading line, so a
+                # fragment like "...cannot be carried forward" is still findable as Casual Leave.
+                if j > 0 and heading and not child_text.startswith(heading):
+                    child_text = f"{heading}\n{child_text}"
                 child_id = f"{parent_id}::sub-{j + 1}"
                 child_chunks.append(
                     Chunk(
@@ -164,6 +185,26 @@ def chunk_pdf_document(
                 )
 
     return parent_chunks, child_chunks
+
+
+def _labelled_section_parts(sections: list[Section], parent_size: int) -> list[tuple[str, str, str]]:
+    """(section label, id slug, text) per parent chunk; a section longer than ``parent_size`` is
+    split at line boundaries into "(cont. 2)", "(cont. 3)", ... parts."""
+    parts: list[tuple[str, str, str]] = []
+    seen_labels: Counter[str] = Counter()
+
+    for sec in sections:
+        heading = " › ".join(sec.path)
+        base_label = " › ".join(sec.path[-_LABEL_DEPTH:])
+        windows = _split_into_windows(sec.body, chunk_size=parent_size - len(heading) - 1, overlap=0)
+        for k, body in enumerate(windows):
+            label = base_label if k == 0 else f"{base_label} (cont. {k + 1})"
+            seen_labels[label] += 1
+            if seen_labels[label] > 1:  # two topics with the same heading path
+                label = f"{label} ({seen_labels[label]})"
+            parts.append((label, _slugify(label), f"{heading}\n{body}"))
+
+    return parts
 
 
 def _extract_blocks_preserving_tables(text: str) -> list[str]:
@@ -223,8 +264,7 @@ def _split_into_windows(text: str, chunk_size: int, overlap: int) -> list[str]:
     for paragraph in paragraphs:
         if len(paragraph) > chunk_size:
             flush()
-            for start in range(0, len(paragraph), chunk_size):
-                windows.append(paragraph[start : start + chunk_size])
+            windows.extend(_split_oversized(paragraph, chunk_size))
             continue
 
         candidate = f"{current}\n\n{paragraph}" if current else paragraph
@@ -240,10 +280,38 @@ def _split_into_windows(text: str, chunk_size: int, overlap: int) -> list[str]:
         return windows
 
     overlapped = [windows[0]]
-    for window in windows[1:]:
-        tail = overlapped[-1][-overlap:]
-        overlapped.append(f"{tail}\n\n{window}" if tail else window)
+    for prev, window in zip(windows, windows[1:]):
+        overlapped.append(f"{_word_aligned_tail(prev, overlap)}\n\n{window}".lstrip())
     return overlapped
+
+
+def _split_oversized(paragraph: str, chunk_size: int) -> list[str]:
+    """Splits a paragraph longer than ``chunk_size`` at line breaks, then spaces -- and only cuts
+    mid-word for a single "word" longer than ``chunk_size``."""
+    pieces: list[str] = []
+    current = ""
+    for token in re.split(r"(\n| )", paragraph):
+        if len(current) + len(token) <= chunk_size:
+            current += token
+            continue
+        if current.strip():
+            pieces.append(current.strip())
+        current = token if token not in ("\n", " ") else ""
+        while len(current) > chunk_size:
+            pieces.append(current[:chunk_size])
+            current = current[chunk_size:]
+    if current.strip():
+        pieces.append(current.strip())
+    return pieces
+
+
+def _word_aligned_tail(text: str, max_chars: int) -> str:
+    """The last ~``max_chars`` of ``text``, starting at a word boundary rather than mid-word."""
+    tail = text[-max_chars:]
+    if len(text) > max_chars and not text[-max_chars - 1].isspace():
+        boundary = re.search(r"\s", tail)
+        tail = tail[boundary.end() :] if boundary else ""
+    return tail.strip()
 
 
 def _split_into_sections(body: str) -> list[tuple[str, list[str]]]:
