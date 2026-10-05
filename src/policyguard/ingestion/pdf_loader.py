@@ -9,8 +9,10 @@ heading structure to hierarchically chunk by, so:
   strictness as Markdown). If there's no sidecar at all, metadata is auto-generated from the
   filename (see `_default_metadata`) so a PDF can be dropped in and ingested with zero setup --
   at the cost of a guessed doc_id/department/effective_date/version instead of real ones.
-- Chunking (in ``chunker.chunk_pdf_document``) is flat fixed-size windows over the extracted
-  text, not hierarchical parent/child sections.
+- Chunking (in ``chunker.chunk_pdf_document``) follows the heading structure recovered by
+  ``pdf_structure`` (one parent per topic), falling back to fixed-size windows when no headings
+  are found.
+- Pages with almost no extractable text are OCR'd (pypdfium2 render + RapidOCR).
 """
 
 from __future__ import annotations

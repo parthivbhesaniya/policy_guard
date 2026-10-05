@@ -27,11 +27,11 @@ services:
       - "8501:8501"
     env_file:
       - .env
-    environment:
-      POLICYGUARD_API_URL: "http://api:8000"
-    depends_on:
-      api:
-        condition: service_healthy
+    # The UI runs the graph in-process (it doesn't call `api`), so it needs the store itself.
+    volumes:
+      - ./chroma_db:/app/chroma_db
+      - ./data:/app/data:ro
+      - ~/.cache/chroma:/root/.cache/chroma
 
   ingest:
     build: .
